@@ -31,6 +31,7 @@ import com.google.genai.types.GenerateContentResponse;
 import com.google.genai.types.GenerateContentResponsePromptFeedback;
 import com.google.genai.types.GenerateContentResponseUsageMetadata;
 import com.google.genai.types.GroundingMetadata;
+import com.google.genai.types.Transcription;
 import java.util.List;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
@@ -107,6 +108,14 @@ public abstract class LlmResponse extends JsonBaseModel {
   @JsonProperty("interrupted")
   public abstract Optional<Boolean> interrupted();
 
+  /** Input audio transcription emitted during live streaming. */
+  @JsonProperty("inputTranscription")
+  public abstract Optional<Transcription> inputTranscription();
+
+  /** Output audio transcription emitted during live streaming. */
+  @JsonProperty("outputTranscription")
+  public abstract Optional<Transcription> outputTranscription();
+
   /** Usage metadata about the response(s). */
   @JsonProperty("usageMetadata")
   public abstract Optional<GenerateContentResponseUsageMetadata> usageMetadata();
@@ -132,6 +141,12 @@ public abstract class LlmResponse extends JsonBaseModel {
 
     @JsonProperty("interrupted")
     public abstract Builder interrupted(@Nullable Boolean interrupted);
+
+    @JsonProperty("inputTranscription")
+    public abstract Builder inputTranscription(@Nullable Transcription inputTranscription);
+
+    @JsonProperty("outputTranscription")
+    public abstract Builder outputTranscription(@Nullable Transcription outputTranscription);
 
     @JsonProperty("groundingMetadata")
     public abstract Builder groundingMetadata(@Nullable GroundingMetadata groundingMetadata);

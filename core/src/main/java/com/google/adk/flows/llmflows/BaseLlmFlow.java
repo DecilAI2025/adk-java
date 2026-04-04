@@ -677,6 +677,8 @@ public abstract class BaseLlmFlow implements BaseFlow {
         && updatedResponse.errorCode().isEmpty()
         && !updatedResponse.interrupted().orElse(false)
         && !updatedResponse.turnComplete().orElse(false)
+        && updatedResponse.inputTranscription().isEmpty()
+        && updatedResponse.outputTranscription().isEmpty()
         && updatedResponse.usageMetadata().isEmpty()) {
       return processorEvents;
     }
@@ -735,6 +737,8 @@ public abstract class BaseLlmFlow implements BaseFlow {
             .errorCode(llmResponse.errorCode().orElse(null))
             .errorMessage(llmResponse.errorMessage().orElse(null))
             .interrupted(llmResponse.interrupted().orElse(null))
+            .inputTranscription(llmResponse.inputTranscription().orElse(null))
+            .outputTranscription(llmResponse.outputTranscription().orElse(null))
             .turnComplete(llmResponse.turnComplete().orElse(null))
             .groundingMetadata(llmResponse.groundingMetadata().orElse(null))
             .avgLogprobs(llmResponse.avgLogprobs().orElse(null))

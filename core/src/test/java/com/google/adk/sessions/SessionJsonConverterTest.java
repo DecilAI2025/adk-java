@@ -18,6 +18,7 @@ import com.google.genai.types.FinishReason;
 import com.google.genai.types.GenerateContentResponseUsageMetadata;
 import com.google.genai.types.GroundingMetadata;
 import com.google.genai.types.Part;
+import com.google.genai.types.Transcription;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.HashMap;
@@ -54,6 +55,10 @@ public final class SessionJsonConverterTest {
             .turnComplete(true)
             .interrupted(false)
             .branch("branch-1")
+            .inputTranscription(
+                Transcription.builder().text("hello from user").finished(true).build())
+            .outputTranscription(
+                Transcription.builder().text("hello from model").finished(false).build())
             .content(Content.fromParts(Part.fromText("Hello")))
             .actions(actions)
             .build();
@@ -73,6 +78,12 @@ public final class SessionJsonConverterTest {
     assertThat(eventMetadata.get("turnComplete").asBoolean()).isTrue();
     assertThat(eventMetadata.get("interrupted").asBoolean()).isFalse();
     assertThat(eventMetadata.get("branch").asText()).isEqualTo("branch-1");
+    assertThat(eventMetadata.get("inputTranscription").get("text").asText())
+        .isEqualTo("hello from user");
+    assertThat(eventMetadata.get("inputTranscription").get("finished").asBoolean()).isTrue();
+    assertThat(eventMetadata.get("outputTranscription").get("text").asText())
+        .isEqualTo("hello from model");
+    assertThat(eventMetadata.get("outputTranscription").get("finished").asBoolean()).isFalse();
 
     JsonNode actionsNode = jsonNode.get("actions");
     assertThat(actionsNode.get("skipSummarization").asBoolean()).isTrue();
@@ -122,6 +133,10 @@ public final class SessionJsonConverterTest {
     eventMetadata.put("turnComplete", true);
     eventMetadata.put("interrupted", false);
     eventMetadata.put("branch", "branch-meta");
+    eventMetadata.put(
+        "inputTranscription", ImmutableMap.of("text", "hello from user", "finished", true));
+    eventMetadata.put(
+        "outputTranscription", ImmutableMap.of("text", "hello from model", "finished", false));
     apiEvent.put("eventMetadata", eventMetadata);
 
     Map<String, Object> actions = new HashMap<>();
@@ -145,6 +160,10 @@ public final class SessionJsonConverterTest {
     assertThat(event.partial().get()).isTrue();
     assertThat(event.turnComplete().get()).isTrue();
     assertThat(event.interrupted().get()).isFalse();
+    assertThat(event.inputTranscription())
+        .hasValue(Transcription.builder().text("hello from user").finished(true).build());
+    assertThat(event.outputTranscription())
+        .hasValue(Transcription.builder().text("hello from model").finished(false).build());
 
     EventActions eventActions = event.actions();
     assertThat(eventActions.skipSummarization()).hasValue(true);

@@ -29,6 +29,7 @@ import com.google.genai.types.Content;
 import com.google.genai.types.FinishReason;
 import com.google.genai.types.GenerateContentResponseUsageMetadata;
 import com.google.genai.types.GroundingMetadata;
+import com.google.genai.types.Transcription;
 import java.io.UncheckedIOException;
 import java.time.Instant;
 import java.util.Collection;
@@ -76,6 +77,8 @@ final class SessionJsonConverter {
     event.longRunningToolIds().ifPresent(v -> putIfNotEmpty(metadataJson, "longRunningToolIds", v));
     event.groundingMetadata().ifPresent(v -> metadataJson.put("groundingMetadata", v));
     event.usageMetadata().ifPresent(v -> metadataJson.put("usageMetadata", v));
+    event.inputTranscription().ifPresent(v -> metadataJson.put("inputTranscription", v));
+    event.outputTranscription().ifPresent(v -> metadataJson.put("outputTranscription", v));
     Map<String, Object> eventJson = new HashMap<>();
     eventJson.put("author", event.author());
     eventJson.put("invocationId", event.invocationId());
@@ -215,6 +218,8 @@ final class SessionJsonConverter {
                     .map(value -> (String) value)
                     .orElse(null))
             .build();
+    Transcription inputTranscription = convertToTranscription(apiEvent.get("inputTranscription"));
+    Transcription outputTranscription = convertToTranscription(apiEvent.get("outputTranscription"));
     Map<String, Object> eventMetadata = (Map<String, Object>) apiEvent.get("eventMetadata");
     if (eventMetadata != null) {
       List<String> longRunningToolIdsList = (List<String>) eventMetadata.get("longRunningToolIds");
@@ -231,6 +236,14 @@ final class SessionJsonConverter {
         usageMetadata =
             objectMapper.convertValue(rawUsageMetadata, GenerateContentResponseUsageMetadata.class);
       }
+      inputTranscription =
+          convertToTranscription(
+              Optional.ofNullable(eventMetadata.get("inputTranscription"))
+                  .orElse(apiEvent.get("inputTranscription")));
+      outputTranscription =
+          convertToTranscription(
+              Optional.ofNullable(eventMetadata.get("outputTranscription"))
+                  .orElse(apiEvent.get("outputTranscription")));
 
       event =
           event.toBuilder()
@@ -239,14 +252,30 @@ final class SessionJsonConverter {
                   Optional.ofNullable((Boolean) eventMetadata.get("turnComplete")).orElse(false))
               .interrupted(
                   Optional.ofNullable((Boolean) eventMetadata.get("interrupted")).orElse(false))
+              .inputTranscription(inputTranscription)
+              .outputTranscription(outputTranscription)
               .branch((String) eventMetadata.get("branch"))
               .groundingMetadata(groundingMetadata)
               .usageMetadata(usageMetadata)
               .longRunningToolIds(
                   longRunningToolIdsList != null ? new HashSet<>(longRunningToolIdsList) : null)
               .build();
+    } else if (inputTranscription != null || outputTranscription != null) {
+      event =
+          event.toBuilder()
+              .inputTranscription(inputTranscription)
+              .outputTranscription(outputTranscription)
+              .build();
     }
     return event;
+  }
+
+  @Nullable
+  private static Transcription convertToTranscription(@Nullable Object rawTranscription) {
+    if (rawTranscription == null) {
+      return null;
+    }
+    return objectMapper.convertValue(rawTranscription, Transcription.class);
   }
 
   @SuppressWarnings("unchecked") // stateDeltaFromMap is a Map<String, Object> from JSON.

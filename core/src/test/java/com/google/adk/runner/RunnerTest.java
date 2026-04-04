@@ -50,6 +50,7 @@ import com.google.adk.sessions.Session;
 import com.google.adk.sessions.SessionKey;
 import com.google.adk.summarizer.EventsCompactionConfig;
 import com.google.adk.telemetry.Tracing;
+import com.google.adk.testing.TestBaseAgent;
 import com.google.adk.testing.TestLlm;
 import com.google.adk.testing.TestUtils;
 import com.google.adk.testing.TestUtils.EchoTool;
@@ -62,6 +63,7 @@ import com.google.genai.types.Content;
 import com.google.genai.types.FunctionCall;
 import com.google.genai.types.FunctionResponse;
 import com.google.genai.types.Part;
+import com.google.genai.types.Transcription;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Context;
 import io.opentelemetry.context.ContextKey;
@@ -1001,6 +1003,66 @@ public final class RunnerTest {
             "test agent: FunctionResponse(name=echo_tool,"
                 + " response={result={args_name=args_value}})",
             "test agent: done");
+  }
+
+  @Test
+  public void runLive_buffersToolEventsUntilFinishedTranscription() throws Exception {
+    Event partialTranscriptEvent =
+        Event.builder()
+            .id("partial-transcript")
+            .invocationId("invocation")
+            .author("test agent")
+            .outputTranscription(Transcription.builder().text("Hel").finished(false).build())
+            .partial(true)
+            .build();
+    Event functionCallEvent =
+        Event.builder()
+            .id("function-call")
+            .invocationId("invocation")
+            .author("test agent")
+            .content(
+                Content.builder()
+                    .role("model")
+                    .parts(
+                        ImmutableList.of(
+                            Part.builder()
+                                .functionCall(
+                                    FunctionCall.builder()
+                                        .name("echo_tool")
+                                        .args(ImmutableMap.of("args_name", "args_value"))
+                                        .build())
+                                .build()))
+                    .build())
+            .build();
+    Event finalTranscriptEvent =
+        Event.builder()
+            .id("final-transcript")
+            .invocationId("invocation")
+            .author("test agent")
+            .outputTranscription(Transcription.builder().text("Hello").finished(true).build())
+            .partial(false)
+            .build();
+
+    TestBaseAgent transcriptAgent =
+        new TestBaseAgent(
+            "test agent",
+            "description",
+            /* beforeAgentCallbacks= */ null,
+            /* afterAgentCallbacks= */ null,
+            () -> Flowable.just(partialTranscriptEvent, functionCallEvent, finalTranscriptEvent));
+    Runner runner =
+        Runner.builder().app(App.builder().name("test").rootAgent(transcriptAgent).build()).build();
+    Session session = runner.sessionService().createSession("test", "user").blockingGet();
+
+    TestSubscriber<Event> testSubscriber =
+        runner.runLive(session, new LiveRequestQueue(), RunConfig.builder().build()).test();
+
+    testSubscriber.await();
+    testSubscriber.assertComplete();
+    assertThat(testSubscriber.values())
+        .containsExactly(partialTranscriptEvent, finalTranscriptEvent, functionCallEvent)
+        .inOrder();
+    assertThat(session.events()).containsExactly(finalTranscriptEvent, functionCallEvent).inOrder();
   }
 
   @Test

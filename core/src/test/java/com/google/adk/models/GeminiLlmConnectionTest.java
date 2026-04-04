@@ -28,6 +28,7 @@ import com.google.genai.types.LiveServerSetupComplete;
 import com.google.genai.types.LiveServerToolCall;
 import com.google.genai.types.LiveServerToolCallCancellation;
 import com.google.genai.types.Part;
+import com.google.genai.types.Transcription;
 import com.google.genai.types.UsageMetadata;
 import io.reactivex.rxjava3.observers.TestObserver;
 import java.util.List;
@@ -290,5 +291,77 @@ public final class GeminiLlmConnectionTest {
             .totalTokenCount(30)
             .build();
     assertThat(usageResponse.usageMetadata()).hasValue(expectedUsageMetadata);
+  }
+
+  @Test
+  public void liveServerMessageConverter_withFinishedOutputTranscription_emitsPartialAndFinal() {
+    LiveServerContent serverContent =
+        LiveServerContent.builder()
+            .outputTranscription(Transcription.builder().text("Hello").finished(true).build())
+            .build();
+    LiveServerMessage message = LiveServerMessage.builder().serverContent(serverContent).build();
+
+    GeminiLlmConnection.LiveServerMessageConverter converter =
+        new GeminiLlmConnection.LiveServerMessageConverter();
+    TestObserver<LlmResponse> testObserver = new TestObserver<>();
+
+    converter.convert(message).subscribe(testObserver);
+
+    testObserver.assertValueCount(2);
+    testObserver.assertComplete();
+
+    List<LlmResponse> responses = testObserver.values();
+    assertThat(responses.get(0).outputTranscription())
+        .hasValue(Transcription.builder().text("Hello").finished(false).build());
+    assertThat(responses.get(0).partial()).hasValue(true);
+    assertThat(responses.get(1).outputTranscription())
+        .hasValue(Transcription.builder().text("Hello").finished(true).build());
+    assertThat(responses.get(1).partial()).hasValue(false);
+  }
+
+  @Test
+  public void liveServerMessageConverter_turnCompleteFlushesPendingOutputTranscription() {
+    LiveServerMessage firstMessage =
+        LiveServerMessage.builder()
+            .serverContent(
+                LiveServerContent.builder()
+                    .outputTranscription(Transcription.builder().text("Hello").build())
+                    .turnComplete(false)
+                    .build())
+            .build();
+    LiveServerMessage secondMessage =
+        LiveServerMessage.builder()
+            .serverContent(
+                LiveServerContent.builder()
+                    .outputTranscription(Transcription.builder().text(" world").build())
+                    .turnComplete(true)
+                    .build())
+            .build();
+
+    GeminiLlmConnection.LiveServerMessageConverter converter =
+        new GeminiLlmConnection.LiveServerMessageConverter();
+
+    TestObserver<LlmResponse> firstObserver = new TestObserver<>();
+    converter.convert(firstMessage).subscribe(firstObserver);
+    firstObserver.assertValueCount(1);
+    assertThat(firstObserver.values().get(0).outputTranscription())
+        .hasValue(Transcription.builder().text("Hello").finished(false).build());
+    assertThat(firstObserver.values().get(0).partial()).hasValue(true);
+
+    TestObserver<LlmResponse> secondObserver = new TestObserver<>();
+    converter.convert(secondMessage).subscribe(secondObserver);
+
+    secondObserver.assertValueCount(3);
+    secondObserver.assertComplete();
+
+    List<LlmResponse> responses = secondObserver.values();
+    assertThat(responses.get(0).outputTranscription())
+        .hasValue(Transcription.builder().text(" world").finished(false).build());
+    assertThat(responses.get(0).partial()).hasValue(true);
+    assertThat(responses.get(1).outputTranscription())
+        .hasValue(Transcription.builder().text("Hello world").finished(true).build());
+    assertThat(responses.get(1).partial()).hasValue(false);
+    assertThat(responses.get(2).turnComplete()).hasValue(true);
+    assertThat(responses.get(2).outputTranscription()).isEmpty();
   }
 }

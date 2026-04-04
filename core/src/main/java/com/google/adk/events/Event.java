@@ -33,6 +33,7 @@ import com.google.genai.types.FunctionCall;
 import com.google.genai.types.FunctionResponse;
 import com.google.genai.types.GenerateContentResponseUsageMetadata;
 import com.google.genai.types.GroundingMetadata;
+import com.google.genai.types.Transcription;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -60,6 +61,8 @@ public class Event extends JsonBaseModel {
   private @Nullable GenerateContentResponseUsageMetadata usageMetadata;
   private @Nullable Double avgLogprobs;
   private @Nullable Boolean interrupted;
+  private @Nullable Transcription inputTranscription;
+  private @Nullable Transcription outputTranscription;
   private @Nullable String branch;
   private @Nullable GroundingMetadata groundingMetadata;
   private @Nullable List<CustomMetadata> customMetadata;
@@ -215,6 +218,26 @@ public class Event extends JsonBaseModel {
     this.interrupted = interrupted;
   }
 
+  /** Input audio transcription emitted during live streaming. */
+  @JsonProperty("inputTranscription")
+  public Optional<Transcription> inputTranscription() {
+    return Optional.ofNullable(inputTranscription);
+  }
+
+  public void setInputTranscription(@Nullable Transcription inputTranscription) {
+    this.inputTranscription = inputTranscription;
+  }
+
+  /** Output audio transcription emitted during live streaming. */
+  @JsonProperty("outputTranscription")
+  public Optional<Transcription> outputTranscription() {
+    return Optional.ofNullable(outputTranscription);
+  }
+
+  public void setOutputTranscription(@Nullable Transcription outputTranscription) {
+    this.outputTranscription = outputTranscription;
+  }
+
   /**
    * The branch of the event. The format is like agent_1.agent_2.agent_3, where agent_1 is the
    * parent of agent_2, and agent_2 is the parent of agent_3. Branch is used when multiple sub-agent
@@ -358,6 +381,8 @@ public class Event extends JsonBaseModel {
     private @Nullable GenerateContentResponseUsageMetadata usageMetadata;
     private @Nullable Double avgLogprobs;
     private @Nullable Boolean interrupted;
+    private @Nullable Transcription inputTranscription;
+    private @Nullable Transcription outputTranscription;
     private @Nullable String branch;
     private @Nullable GroundingMetadata groundingMetadata;
     private @Nullable List<CustomMetadata> customMetadata;
@@ -472,6 +497,20 @@ public class Event extends JsonBaseModel {
     }
 
     @CanIgnoreReturnValue
+    @JsonProperty("inputTranscription")
+    public Builder inputTranscription(@Nullable Transcription value) {
+      this.inputTranscription = value;
+      return this;
+    }
+
+    @CanIgnoreReturnValue
+    @JsonProperty("outputTranscription")
+    public Builder outputTranscription(@Nullable Transcription value) {
+      this.outputTranscription = value;
+      return this;
+    }
+
+    @CanIgnoreReturnValue
     @JsonProperty("timestamp")
     public Builder timestamp(long value) {
       this.timestamp = value;
@@ -535,6 +574,8 @@ public class Event extends JsonBaseModel {
       event.setUsageMetadata(usageMetadata);
       event.setAvgLogprobs(avgLogprobs);
       event.setInterrupted(interrupted);
+      event.setInputTranscription(inputTranscription);
+      event.setOutputTranscription(outputTranscription);
       event.branch(branch);
       event.setGroundingMetadata(groundingMetadata);
       event.setCustomMetadata(customMetadata);
@@ -572,6 +613,8 @@ public class Event extends JsonBaseModel {
             .usageMetadata(this.usageMetadata)
             .avgLogprobs(this.avgLogprobs)
             .interrupted(this.interrupted)
+            .inputTranscription(this.inputTranscription)
+            .outputTranscription(this.outputTranscription)
             .branch(this.branch)
             .groundingMetadata(this.groundingMetadata)
             .customMetadata(this.customMetadata)
@@ -605,6 +648,8 @@ public class Event extends JsonBaseModel {
         && Objects.equals(usageMetadata, other.usageMetadata)
         && Objects.equals(avgLogprobs, other.avgLogprobs)
         && Objects.equals(interrupted, other.interrupted)
+        && Objects.equals(inputTranscription, other.inputTranscription)
+        && Objects.equals(outputTranscription, other.outputTranscription)
         && Objects.equals(branch, other.branch)
         && Objects.equals(groundingMetadata, other.groundingMetadata)
         && Objects.equals(customMetadata, other.customMetadata)
@@ -633,6 +678,8 @@ public class Event extends JsonBaseModel {
         usageMetadata,
         avgLogprobs,
         interrupted,
+        inputTranscription,
+        outputTranscription,
         branch,
         groundingMetadata,
         customMetadata,

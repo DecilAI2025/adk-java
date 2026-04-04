@@ -50,6 +50,7 @@ import com.google.genai.types.AudioTranscriptionConfig;
 import com.google.genai.types.Content;
 import com.google.genai.types.Modality;
 import com.google.genai.types.Part;
+import com.google.genai.types.Transcription;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.context.Context;
@@ -64,6 +65,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.jspecify.annotations.Nullable;
 
 /** The main class for the GenAI Agents runner. */
@@ -693,10 +695,9 @@ public class Runner {
           return invocationContextSingle
               .flatMapPublisher(
                   updatedInvocationContext ->
-                      updatedInvocationContext
-                          .agent()
-                          .runLive(updatedInvocationContext)
-                          .doOnNext(event -> this.sessionService.appendEvent(session, event)))
+                      appendLiveEventsWithPythonTranscriptionOrdering(
+                          session,
+                          updatedInvocationContext.agent().runLive(updatedInvocationContext)))
               .doOnError(
                   throwable -> {
                     Span span = Span.current();
@@ -705,6 +706,55 @@ public class Runner {
                   })
               .compose(Tracing.<Event>withContext(capturedContext));
         });
+  }
+
+  private Flowable<Event> appendLiveEventsWithPythonTranscriptionOrdering(
+      Session session, Flowable<Event> events) {
+    List<Event> bufferedEvents = new ArrayList<>();
+    AtomicBoolean isTranscribing = new AtomicBoolean(false);
+
+    return events
+        .concatMap(
+            event -> {
+              if (event.partial().orElse(false) && isTranscriptionEvent(event)) {
+                isTranscribing.set(true);
+              }
+
+              if (isTranscribing.get() && isToolCallOrResponseEvent(event)) {
+                bufferedEvents.add(event);
+                return Flowable.<Event>empty();
+              }
+
+              List<Event> eventsToEmit = new ArrayList<>();
+              eventsToEmit.add(event);
+              if (!event.partial().orElse(false)
+                  && isTranscriptionEvent(event)
+                  && hasNonEmptyTranscriptionText(event)) {
+                isTranscribing.set(false);
+                eventsToEmit.addAll(bufferedEvents);
+                bufferedEvents.clear();
+              }
+              return Flowable.fromIterable(eventsToEmit);
+            })
+        .doOnNext(event -> this.sessionService.appendEvent(session, event))
+        .doFinally(bufferedEvents::clear);
+  }
+
+  private static boolean isTranscriptionEvent(Event event) {
+    return event.inputTranscription().isPresent() || event.outputTranscription().isPresent();
+  }
+
+  private static boolean isToolCallOrResponseEvent(Event event) {
+    return !event.functionCalls().isEmpty() || !event.functionResponses().isEmpty();
+  }
+
+  private static boolean hasNonEmptyTranscriptionText(Event event) {
+    return hasNonEmptyTranscriptionText(event.inputTranscription())
+        || hasNonEmptyTranscriptionText(event.outputTranscription());
+  }
+
+  private static boolean hasNonEmptyTranscriptionText(Optional<Transcription> transcription) {
+    return transcription.flatMap(Transcription::text).filter(text -> !text.isEmpty()).isPresent();
   }
 
   /**

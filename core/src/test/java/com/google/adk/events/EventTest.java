@@ -26,6 +26,7 @@ import com.google.genai.types.FinishReason;
 import com.google.genai.types.FunctionCall;
 import com.google.genai.types.GenerateContentResponseUsageMetadata;
 import com.google.genai.types.Part;
+import com.google.genai.types.Transcription;
 import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
 import org.junit.Test;
@@ -75,6 +76,10 @@ public final class EventTest {
                   .build())
           .avgLogprobs(0.5)
           .interrupted(true)
+          .inputTranscription(
+              Transcription.builder().text("user transcript").finished(true).build())
+          .outputTranscription(
+              Transcription.builder().text("model transcript").finished(false).build())
           .timestamp(123456789L)
           .modelVersion("model_version")
           .build();
@@ -98,6 +103,10 @@ public final class EventTest {
                 .build());
     assertThat(EVENT.avgLogprobs()).hasValue(0.5);
     assertThat(EVENT.interrupted()).hasValue(true);
+    assertThat(EVENT.inputTranscription())
+        .hasValue(Transcription.builder().text("user transcript").finished(true).build());
+    assertThat(EVENT.outputTranscription())
+        .hasValue(Transcription.builder().text("model transcript").finished(false).build());
     assertThat(EVENT.timestamp()).isEqualTo(123456789L);
     assertThat(EVENT.actions()).isEqualTo(EVENT_ACTIONS);
     assertThat(EVENT.modelVersion()).hasValue("model_version");

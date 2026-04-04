@@ -43,6 +43,7 @@ import com.google.genai.types.FinishReason;
 import com.google.genai.types.FunctionDeclaration;
 import com.google.genai.types.GenerateContentResponseUsageMetadata;
 import com.google.genai.types.Part;
+import com.google.genai.types.Transcription;
 import io.opentelemetry.context.Context;
 import io.opentelemetry.context.ContextKey;
 import io.opentelemetry.context.Scope;
@@ -111,6 +112,25 @@ public final class BaseLlmFlowTest {
                 .promptTokenCount(10)
                 .candidatesTokenCount(20)
                 .build());
+  }
+
+  @Test
+  public void run_transcriptionOnlyResponse_returnsTranscriptEvent() {
+    Transcription outputTranscription =
+        Transcription.builder().text("stitched transcript").finished(true).build();
+    LlmResponse llmResponse =
+        LlmResponse.builder().outputTranscription(outputTranscription).partial(false).build();
+    TestLlm testLlm = createTestLlm(llmResponse);
+    InvocationContext invocationContext = createInvocationContext(createTestAgent(testLlm));
+    BaseLlmFlow baseLlmFlow = createBaseLlmFlowWithoutProcessors();
+
+    List<Event> events = baseLlmFlow.run(invocationContext).toList().blockingGet();
+
+    assertThat(events).hasSize(1);
+    Event event = getOnlyElement(events);
+    assertThat(event.outputTranscription()).hasValue(outputTranscription);
+    assertThat(event.partial()).hasValue(false);
+    assertThat(event.content()).isEmpty();
   }
 
   @Test

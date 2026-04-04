@@ -34,6 +34,7 @@ import com.google.genai.types.LiveServerContent;
 import com.google.genai.types.LiveServerMessage;
 import com.google.genai.types.LiveServerToolCall;
 import com.google.genai.types.Part;
+import com.google.genai.types.Transcription;
 import com.google.genai.types.UsageMetadata;
 import io.reactivex.rxjava3.core.Completable;
 import io.reactivex.rxjava3.core.Flowable;
@@ -70,6 +71,8 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
   private final Flowable<LlmResponse> responseFlowable = responseProcessor.serialize();
   private final CompositeDisposable disposables = new CompositeDisposable();
   private final AtomicBoolean closed = new AtomicBoolean(false);
+  private final LiveServerMessageConverter liveServerMessageConverter =
+      new LiveServerMessageConverter();
 
   /**
    * Establishes a new connection.
@@ -124,7 +127,7 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
 
     logger.debug("Received server message: {}", message.toJson());
 
-    Observable<LlmResponse> llmResponse = convertToServerResponse(message);
+    Observable<LlmResponse> llmResponse = liveServerMessageConverter.convert(message);
     if (!disposables.add(
         llmResponse.subscribe(responseProcessor::onNext, responseProcessor::onError))) {
       logger.warn(
@@ -134,64 +137,29 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
 
   /** Converts a server message into the standardized LlmResponse format. */
   static Observable<LlmResponse> convertToServerResponse(LiveServerMessage message) {
-    return Observable.create(
-        emitter -> {
-          // AtomicBoolean is used to modify state from within lambdas, which
-          // require captured variables to be effectively final.
-          final AtomicBoolean handled = new AtomicBoolean(false);
-          message
-              .serverContent()
-              .ifPresent(
-                  serverContent -> {
-                    emitter.onNext(createServerContentResponse(serverContent));
-                    handled.set(true);
-                  });
-          message
-              .toolCall()
-              .ifPresent(
-                  toolCall -> {
-                    emitter.onNext(createToolCallResponse(toolCall));
-                    handled.set(true);
-                  });
-          message
-              .usageMetadata()
-              .ifPresent(
-                  usageMetadata -> {
-                    logger.debug("Received usage metadata: {}", usageMetadata);
-                    emitter.onNext(createUsageMetadataResponse(usageMetadata));
-                    handled.set(true);
-                  });
-          message
-              .toolCallCancellation()
-              .ifPresent(
-                  toolCallCancellation -> {
-                    logger.debug("Received tool call cancellation: {}", toolCallCancellation);
-                    // TODO: implement proper CFC and thus tool call cancellation handling.
-                    handled.set(true);
-                  });
-          message
-              .setupComplete()
-              .ifPresent(
-                  setupComplete -> {
-                    logger.debug("Received setup complete.");
-                    handled.set(true);
-                  });
-
-          if (!handled.get()) {
-            logger.warn("Received unknown or empty server message: {}", message.toJson());
-            emitter.onNext(createUnknownMessageResponse());
-          }
-          emitter.onComplete();
-        });
+    return new LiveServerMessageConverter().convert(message);
   }
 
-  private static LlmResponse createServerContentResponse(LiveServerContent serverContent) {
+  private static LlmResponse createServerContentResponse(
+      LiveServerContent serverContent, boolean splitTurnComplete) {
     LlmResponse.Builder builder = LlmResponse.builder();
     serverContent.modelTurn().ifPresent(builder::content);
+    serverContent.groundingMetadata().ifPresent(builder::groundingMetadata);
+    builder.interrupted(serverContent.interrupted().orElse(null));
+    if (splitTurnComplete) {
+      return builder.partial(false).build();
+    }
     return builder
         .partial(serverContent.turnComplete().map(completed -> !completed).orElse(false))
         .turnComplete(serverContent.turnComplete().orElse(false))
+        .build();
+  }
+
+  private static LlmResponse createTurnCompleteResponse(LiveServerContent serverContent) {
+    return LlmResponse.builder()
+        .turnComplete(serverContent.turnComplete().orElse(null))
         .interrupted(serverContent.interrupted().orElse(null))
+        .groundingMetadata(serverContent.groundingMetadata().orElse(null))
         .build();
   }
 
@@ -222,6 +190,193 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
         .errorCode(new FinishReason("Unknown server message."))
         .errorMessage("Received unknown server message.")
         .build();
+  }
+
+  static final class LiveServerMessageConverter {
+    private final StringBuilder inputTranscriptionText = new StringBuilder();
+    private final StringBuilder outputTranscriptionText = new StringBuilder();
+
+    Observable<LlmResponse> convert(LiveServerMessage message) {
+      return Observable.create(
+          emitter -> {
+            final AtomicBoolean handled = new AtomicBoolean(false);
+            message
+                .serverContent()
+                .ifPresent(
+                    serverContent -> {
+                      emitServerContentResponses(serverContent, emitter);
+                      handled.set(true);
+                    });
+            message
+                .toolCall()
+                .ifPresent(
+                    toolCall -> {
+                      emitter.onNext(createToolCallResponse(toolCall));
+                      handled.set(true);
+                    });
+            message
+                .usageMetadata()
+                .ifPresent(
+                    usageMetadata -> {
+                      logger.debug("Received usage metadata: {}", usageMetadata);
+                      emitter.onNext(createUsageMetadataResponse(usageMetadata));
+                      handled.set(true);
+                    });
+            message
+                .toolCallCancellation()
+                .ifPresent(
+                    toolCallCancellation -> {
+                      logger.debug("Received tool call cancellation: {}", toolCallCancellation);
+                      // TODO: implement proper CFC and thus tool call cancellation handling.
+                      handled.set(true);
+                    });
+            message
+                .setupComplete()
+                .ifPresent(
+                    setupComplete -> {
+                      logger.debug("Received setup complete.");
+                      handled.set(true);
+                    });
+
+            if (!handled.get()) {
+              logger.warn("Received unknown or empty server message: {}", message.toJson());
+              emitter.onNext(createUnknownMessageResponse());
+            }
+            emitter.onComplete();
+          });
+    }
+
+    private void emitServerContentResponses(
+        LiveServerContent serverContent,
+        io.reactivex.rxjava3.core.ObservableEmitter<LlmResponse> emitter) {
+      boolean splitTurnComplete =
+          serverContent.turnComplete().orElse(false)
+              && (serverContent.inputTranscription().isPresent()
+                  || serverContent.outputTranscription().isPresent());
+
+      LlmResponse contentResponse = createServerContentResponse(serverContent, splitTurnComplete);
+      if (shouldEmitServerContentResponse(contentResponse, splitTurnComplete)) {
+        emitter.onNext(contentResponse);
+      }
+
+      emitTranscriptionResponses(serverContent, emitter);
+
+      if (shouldFlushPendingTranscriptions(serverContent)) {
+        flushPendingTranscriptions(emitter);
+      }
+
+      if (splitTurnComplete) {
+        emitter.onNext(createTurnCompleteResponse(serverContent));
+      }
+    }
+
+    private static boolean shouldEmitServerContentResponse(
+        LlmResponse response, boolean splitTurnComplete) {
+      return response.content().isPresent()
+          || response.interrupted().orElse(false)
+          || response.groundingMetadata().isPresent()
+          || (!splitTurnComplete && response.turnComplete().orElse(false));
+    }
+
+    private void emitTranscriptionResponses(
+        LiveServerContent serverContent,
+        io.reactivex.rxjava3.core.ObservableEmitter<LlmResponse> emitter) {
+      serverContent
+          .inputTranscription()
+          .ifPresent(transcription -> emitInputTranscriptionResponses(transcription, emitter));
+      serverContent
+          .outputTranscription()
+          .ifPresent(transcription -> emitOutputTranscriptionResponses(transcription, emitter));
+    }
+
+    private void emitInputTranscriptionResponses(
+        Transcription transcription,
+        io.reactivex.rxjava3.core.ObservableEmitter<LlmResponse> emitter) {
+      if (transcription.text().isPresent()) {
+        String text = transcription.text().orElseThrow();
+        inputTranscriptionText.append(text);
+        emitter.onNext(
+            LlmResponse.builder()
+                .inputTranscription(Transcription.builder().text(text).finished(false).build())
+                .partial(true)
+                .build());
+      }
+
+      if (transcription.finished().orElse(false)) {
+        emitter.onNext(
+            LlmResponse.builder()
+                .inputTranscription(
+                    Transcription.builder()
+                        .text(inputTranscriptionText.toString())
+                        .finished(true)
+                        .build())
+                .partial(false)
+                .build());
+        inputTranscriptionText.setLength(0);
+      }
+    }
+
+    private void emitOutputTranscriptionResponses(
+        Transcription transcription,
+        io.reactivex.rxjava3.core.ObservableEmitter<LlmResponse> emitter) {
+      if (transcription.text().isPresent()) {
+        String text = transcription.text().orElseThrow();
+        outputTranscriptionText.append(text);
+        emitter.onNext(
+            LlmResponse.builder()
+                .outputTranscription(Transcription.builder().text(text).finished(false).build())
+                .partial(true)
+                .build());
+      }
+
+      if (transcription.finished().orElse(false)) {
+        emitter.onNext(
+            LlmResponse.builder()
+                .outputTranscription(
+                    Transcription.builder()
+                        .text(outputTranscriptionText.toString())
+                        .finished(true)
+                        .build())
+                .partial(false)
+                .build());
+        outputTranscriptionText.setLength(0);
+      }
+    }
+
+    private boolean shouldFlushPendingTranscriptions(LiveServerContent serverContent) {
+      return serverContent.interrupted().orElse(false)
+          || serverContent.turnComplete().orElse(false)
+          || serverContent.generationComplete().orElse(false);
+    }
+
+    private void flushPendingTranscriptions(
+        io.reactivex.rxjava3.core.ObservableEmitter<LlmResponse> emitter) {
+      if (inputTranscriptionText.length() > 0) {
+        emitter.onNext(
+            LlmResponse.builder()
+                .inputTranscription(
+                    Transcription.builder()
+                        .text(inputTranscriptionText.toString())
+                        .finished(true)
+                        .build())
+                .partial(false)
+                .build());
+        inputTranscriptionText.setLength(0);
+      }
+
+      if (outputTranscriptionText.length() > 0) {
+        emitter.onNext(
+            LlmResponse.builder()
+                .outputTranscription(
+                    Transcription.builder()
+                        .text(outputTranscriptionText.toString())
+                        .finished(true)
+                        .build())
+                .partial(false)
+                .build());
+        outputTranscriptionText.setLength(0);
+      }
+    }
   }
 
   /** Handles errors that occur *during* the initial connection attempt. */
