@@ -273,7 +273,13 @@ public final class TestLlm extends BaseLlm {
 
     @Override
     public Completable sendContent(Content content) {
-      liveRequestHistory.add(LiveRequest.builder().content(content).build());
+      return sendContent(content, true);
+    }
+
+    @Override
+    public Completable sendContent(Content content, boolean turnComplete) {
+      liveRequestHistory.add(
+          LiveRequest.builder().content(content).turnComplete(turnComplete).build());
       return Completable.complete();
     }
 

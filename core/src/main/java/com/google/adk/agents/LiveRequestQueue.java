@@ -41,6 +41,10 @@ public final class LiveRequestQueue {
     processor.onNext(LiveRequest.builder().content(content).build());
   }
 
+  public void content(Content content, boolean turnComplete) {
+    processor.onNext(LiveRequest.builder().content(content).turnComplete(turnComplete).build());
+  }
+
   public void realtime(Blob blob) {
     processor.onNext(LiveRequest.builder().blob(blob).build());
   }
