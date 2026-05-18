@@ -41,6 +41,7 @@ import com.google.adk.agents.BaseAgent;
 import com.google.adk.agents.Callbacks;
 import com.google.adk.agents.Callbacks.AfterModelCallback;
 import com.google.adk.agents.InvocationContext;
+import com.google.adk.agents.LiveRequest;
 import com.google.adk.agents.LiveRequestQueue;
 import com.google.adk.agents.LlmAgent;
 import com.google.adk.agents.RunConfig;
@@ -1613,6 +1614,23 @@ public final class RunnerTest {
     testSubscriber.await();
     testSubscriber.assertComplete();
     assertThat(simplifyEvents(testSubscriber.values())).containsExactly("test agent: from llm");
+  }
+
+  @Test
+  public void runLive_contentWithTurnCompleteFalsePropagatesToConnection() throws Exception {
+    LiveRequestQueue liveRequestQueue = new LiveRequestQueue();
+    TestSubscriber<Event> testSubscriber =
+        runner.runLive(session, liveRequestQueue, RunConfig.builder().build()).test();
+
+    liveRequestQueue.content(createContent("hidden control"), false);
+    liveRequestQueue.close();
+
+    testSubscriber.await();
+    testSubscriber.assertComplete();
+    assertThat(testLlm.getLiveRequestHistory().get(0).content()).isPresent();
+    assertThat(testLlm.getLiveRequestHistory().get(0).turnComplete()).hasValue(false);
+    assertThat(testLlm.getLiveRequestHistory().stream().filter(LiveRequest::shouldClose).count())
+        .isAtLeast(1);
   }
 
   @Test
