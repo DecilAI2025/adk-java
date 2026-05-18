@@ -65,6 +65,18 @@ public abstract class LiveRequest extends JsonBaseModel {
   @JsonProperty("close")
   public abstract Optional<Boolean> close();
 
+  /**
+   * Returns whether content should complete the current turn.
+   *
+   * <p>If false, the live model should append the content and wait for more client input before
+   * generating a response. If unset, content sends preserve the existing ADK behavior and complete
+   * the turn.
+   *
+   * @return An optional boolean indicating whether the content completes the turn.
+   */
+  @JsonProperty("turnComplete")
+  public abstract Optional<Boolean> turnComplete();
+
   /** Extracts boolean value from the close field or returns false if unset. */
   public boolean shouldClose() {
     return close().orElse(false);
@@ -82,6 +94,9 @@ public abstract class LiveRequest extends JsonBaseModel {
 
     @JsonProperty("close")
     public abstract Builder close(@Nullable Boolean close);
+
+    @JsonProperty("turnComplete")
+    public abstract Builder turnComplete(@Nullable Boolean turnComplete);
 
     abstract LiveRequest autoBuild();
 

@@ -42,6 +42,16 @@ public interface BaseLlmConnection {
   Completable sendContent(Content content);
 
   /**
+   * Sends content to the model and controls whether it completes the current live turn.
+   *
+   * <p>The default implementation preserves the legacy behavior for connection implementations that
+   * do not support explicit turn completion.
+   */
+  default Completable sendContent(Content content, boolean turnComplete) {
+    return sendContent(content);
+  }
+
+  /**
    * Sends a chunk of audio or a frame of video to the model in realtime.
    *
    * <p>The model may not respond immediately upon receiving the blob. It will do voice activity
