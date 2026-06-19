@@ -25,6 +25,7 @@ import com.google.genai.types.Content;
 import com.google.genai.types.FinishReason;
 import com.google.genai.types.FunctionCall;
 import com.google.genai.types.GenerateContentResponseUsageMetadata;
+import com.google.genai.types.LiveServerSessionResumptionUpdate;
 import com.google.genai.types.Part;
 import com.google.genai.types.Transcription;
 import java.time.Instant;
@@ -266,6 +267,31 @@ public final class EventTest {
     assertThat(deserialized).isEqualTo(event);
     assertThat(deserialized.inputTranscription()).hasValue(inputTranscription);
     assertThat(deserialized.outputTranscription()).hasValue(outputTranscription);
+  }
+
+  @Test
+  public void event_json_serialization_with_live_session_resumption_update_works()
+      throws Exception {
+    LiveServerSessionResumptionUpdate update =
+        LiveServerSessionResumptionUpdate.builder()
+            .newHandle("resume-handle")
+            .resumable(true)
+            .lastConsumedClientMessageIndex(17L)
+            .build();
+    Event event =
+        Event.builder()
+            .id("event_id")
+            .invocationId("invocation_id")
+            .author("agent")
+            .timestamp(123456789L)
+            .liveSessionResumptionUpdate(update)
+            .build();
+
+    String json = event.toJson();
+    Event deserialized = Event.fromJson(json);
+
+    assertThat(deserialized).isEqualTo(event);
+    assertThat(deserialized.liveSessionResumptionUpdate()).hasValue(update);
   }
 
   @Test

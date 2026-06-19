@@ -22,6 +22,7 @@ import static org.junit.Assert.assertThrows;
 import com.google.common.collect.ImmutableList;
 import com.google.genai.types.AudioTranscriptionConfig;
 import com.google.genai.types.Modality;
+import com.google.genai.types.SessionResumptionConfig;
 import com.google.genai.types.SpeechConfig;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -34,6 +35,8 @@ public final class RunConfigTest {
   public void testBuilderWithVariousValues() {
     SpeechConfig speechConfig = SpeechConfig.builder().build();
     AudioTranscriptionConfig audioTranscriptionConfig = AudioTranscriptionConfig.builder().build();
+    SessionResumptionConfig sessionResumption =
+        SessionResumptionConfig.builder().transparent(true).handle("resume-handle").build();
 
     RunConfig runConfig =
         RunConfig.builder()
@@ -43,6 +46,7 @@ public final class RunConfigTest {
             .setStreamingMode(RunConfig.StreamingMode.SSE)
             .setOutputAudioTranscription(audioTranscriptionConfig)
             .setInputAudioTranscription(audioTranscriptionConfig)
+            .sessionResumption(sessionResumption)
             .setMaxLlmCalls(10)
             .build();
 
@@ -52,6 +56,7 @@ public final class RunConfigTest {
     assertThat(runConfig.streamingMode()).isEqualTo(RunConfig.StreamingMode.SSE);
     assertThat(runConfig.outputAudioTranscription()).isEqualTo(audioTranscriptionConfig);
     assertThat(runConfig.inputAudioTranscription()).isEqualTo(audioTranscriptionConfig);
+    assertThat(runConfig.sessionResumption()).isEqualTo(sessionResumption);
     assertThat(runConfig.maxLlmCalls()).isEqualTo(10);
   }
 
@@ -65,7 +70,19 @@ public final class RunConfigTest {
     assertThat(runConfig.streamingMode()).isEqualTo(RunConfig.StreamingMode.NONE);
     assertThat(runConfig.outputAudioTranscription()).isNull();
     assertThat(runConfig.inputAudioTranscription()).isNull();
+    assertThat(runConfig.sessionResumption()).isNull();
     assertThat(runConfig.maxLlmCalls()).isEqualTo(500);
+  }
+
+  @Test
+  public void testBuilderCopiesSessionResumption() {
+    SessionResumptionConfig sessionResumption =
+        SessionResumptionConfig.builder().transparent(true).handle("resume-handle").build();
+    RunConfig original = RunConfig.builder().sessionResumption(sessionResumption).build();
+
+    RunConfig copy = RunConfig.builder(original).build();
+
+    assertThat(copy.sessionResumption()).isEqualTo(sessionResumption);
   }
 
   @Test

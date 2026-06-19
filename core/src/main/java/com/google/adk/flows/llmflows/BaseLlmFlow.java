@@ -681,7 +681,8 @@ public abstract class BaseLlmFlow implements BaseFlow {
         && !updatedResponse.turnComplete().orElse(false)
         && updatedResponse.usageMetadata().isEmpty()
         && updatedResponse.inputTranscription().isEmpty()
-        && updatedResponse.outputTranscription().isEmpty()) {
+        && updatedResponse.outputTranscription().isEmpty()
+        && updatedResponse.liveSessionResumptionUpdate().isEmpty()) {
       return processorEvents;
     }
 
@@ -746,7 +747,8 @@ public abstract class BaseLlmFlow implements BaseFlow {
             .usageMetadata(llmResponse.usageMetadata().orElse(null))
             .modelVersion(llmResponse.modelVersion().orElse(null))
             .inputTranscription(llmResponse.inputTranscription().orElse(null))
-            .outputTranscription(llmResponse.outputTranscription().orElse(null));
+            .outputTranscription(llmResponse.outputTranscription().orElse(null))
+            .liveSessionResumptionUpdate(llmResponse.liveSessionResumptionUpdate().orElse(null));
 
     Event event = eventBuilder.build();
 
