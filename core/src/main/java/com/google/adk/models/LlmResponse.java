@@ -31,6 +31,7 @@ import com.google.genai.types.GenerateContentResponse;
 import com.google.genai.types.GenerateContentResponsePromptFeedback;
 import com.google.genai.types.GenerateContentResponseUsageMetadata;
 import com.google.genai.types.GroundingMetadata;
+import com.google.genai.types.LiveServerSessionResumptionUpdate;
 import com.google.genai.types.Transcription;
 import java.util.List;
 import java.util.Optional;
@@ -130,6 +131,10 @@ public abstract class LlmResponse extends JsonBaseModel {
   @JsonProperty("outputTranscription")
   public abstract Optional<Transcription> outputTranscription();
 
+  /** Live session resumption state update emitted by the Live API. */
+  @JsonProperty("liveSessionResumptionUpdate")
+  public abstract Optional<LiveServerSessionResumptionUpdate> liveSessionResumptionUpdate();
+
   public abstract Builder toBuilder();
 
   /** Builder for constructing {@link LlmResponse} instances. */
@@ -184,6 +189,10 @@ public abstract class LlmResponse extends JsonBaseModel {
 
     @JsonProperty("outputTranscription")
     public abstract Builder outputTranscription(@Nullable Transcription outputTranscription);
+
+    @JsonProperty("liveSessionResumptionUpdate")
+    public abstract Builder liveSessionResumptionUpdate(
+        @Nullable LiveServerSessionResumptionUpdate liveSessionResumptionUpdate);
 
     @CanIgnoreReturnValue
     public final Builder response(GenerateContentResponse response) {

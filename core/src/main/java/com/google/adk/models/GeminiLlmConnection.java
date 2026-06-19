@@ -32,6 +32,7 @@ import com.google.genai.types.LiveSendRealtimeInputParameters;
 import com.google.genai.types.LiveSendToolResponseParameters;
 import com.google.genai.types.LiveServerContent;
 import com.google.genai.types.LiveServerMessage;
+import com.google.genai.types.LiveServerSessionResumptionUpdate;
 import com.google.genai.types.LiveServerToolCall;
 import com.google.genai.types.Part;
 import com.google.genai.types.UsageMetadata;
@@ -170,6 +171,15 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
                     handled.set(true);
                   });
           message
+              .sessionResumptionUpdate()
+              .ifPresent(
+                  sessionResumptionUpdate -> {
+                    logger.debug(
+                        "Received live session resumption update: {}", sessionResumptionUpdate);
+                    emitter.onNext(createSessionResumptionUpdateResponse(sessionResumptionUpdate));
+                    handled.set(true);
+                  });
+          message
               .setupComplete()
               .ifPresent(
                   setupComplete -> {
@@ -217,6 +227,11 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
     return LlmResponse.builder()
         .usageMetadata(GeminiUtil.toGenerateContentResponseUsageMetadata(usageMetadata))
         .build();
+  }
+
+  private static LlmResponse createSessionResumptionUpdateResponse(
+      LiveServerSessionResumptionUpdate sessionResumptionUpdate) {
+    return LlmResponse.builder().liveSessionResumptionUpdate(sessionResumptionUpdate).build();
   }
 
   private static LlmResponse createUnknownMessageResponse() {
