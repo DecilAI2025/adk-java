@@ -38,6 +38,7 @@ import com.google.genai.types.CustomizedAvatar;
 import com.google.genai.types.GenerateContentConfig;
 import com.google.genai.types.Modality;
 import com.google.genai.types.Schema;
+import com.google.genai.types.SessionResumptionConfig;
 import com.google.genai.types.SpeechConfig;
 import com.google.genai.types.VoiceConfig;
 import io.reactivex.rxjava3.core.Flowable;
@@ -263,6 +264,23 @@ public final class BasicTest {
     assertThat(updatedRequest.liveConnectConfig().speechConfig()).isEmpty();
     assertThat(updatedRequest.liveConnectConfig().inputAudioTranscription())
         .hasValue(TEST_AUDIO_TRANSCRIPTION_CONFIG);
+    assertThat(result.events()).isEmpty();
+  }
+
+  @Test
+  public void processRequest_buildsLiveConnectConfigFromRunConfig_sessionResumption() {
+    SessionResumptionConfig sessionResumption =
+        SessionResumptionConfig.builder().transparent(true).handle("resume-handle").build();
+    RunConfig runConfig = RunConfig.builder().sessionResumption(sessionResumption).build();
+    LlmAgent agentWithConfig = LlmAgent.builder().name("agentWithConfig").model(testLlm).build();
+    InvocationContext contextWithRunConfig = createInvocationContext(agentWithConfig, runConfig);
+
+    RequestProcessingResult result =
+        basicProcessor.processRequest(contextWithRunConfig, initialRequest).blockingGet();
+
+    LlmRequest updatedRequest = result.updatedRequest();
+    assertThat(updatedRequest.liveConnectConfig()).isNotNull();
+    assertThat(updatedRequest.liveConnectConfig().sessionResumption()).hasValue(sessionResumption);
     assertThat(result.events()).isEmpty();
   }
 

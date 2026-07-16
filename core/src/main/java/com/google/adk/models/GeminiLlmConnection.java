@@ -32,6 +32,7 @@ import com.google.genai.types.LiveSendRealtimeInputParameters;
 import com.google.genai.types.LiveSendToolResponseParameters;
 import com.google.genai.types.LiveServerContent;
 import com.google.genai.types.LiveServerMessage;
+import com.google.genai.types.LiveServerSessionResumptionUpdate;
 import com.google.genai.types.LiveServerToolCall;
 import com.google.genai.types.Part;
 import com.google.genai.types.UsageMetadata;
@@ -42,6 +43,7 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import java.net.SocketException;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -79,26 +81,53 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
    * @param connectConfig Configuration parameters for the live session.
    */
   GeminiLlmConnection(Client apiClient, String modelName, LiveConnectConfig connectConfig) {
-    this.apiClient = Objects.requireNonNull(apiClient);
+    this(
+        Objects.requireNonNull(apiClient),
+        modelName,
+        connectConfig,
+        connect(apiClient, modelName, connectConfig),
+        true);
+  }
+
+  GeminiLlmConnection(
+      CompletableFuture<AsyncSession> sessionFuture,
+      String modelName,
+      LiveConnectConfig connectConfig) {
+    this(null, modelName, connectConfig, sessionFuture, false);
+  }
+
+  private GeminiLlmConnection(
+      Client apiClient,
+      String modelName,
+      LiveConnectConfig connectConfig,
+      CompletableFuture<AsyncSession> sessionFuture,
+      boolean setupReceiver) {
+    this.apiClient = apiClient;
     this.modelName = Objects.requireNonNull(modelName);
     this.connectConfig = Objects.requireNonNull(connectConfig);
 
     this.sessionFuture =
-        this.apiClient
-            .async
-            .live
-            .connect(this.modelName, this.connectConfig)
-            .whenCompleteAsync(
-                (session, throwable) -> {
-                  if (throwable != null) {
-                    handleConnectionError(throwable);
-                  } else if (session != null) {
-                    setupReceiver(session);
-                  } else if (!closed.get()) {
-                    handleConnectionError(
-                        new SocketException("WebSocket connection failed without explicit error."));
-                  }
-                });
+        setupReceiver
+            ? Objects.requireNonNull(sessionFuture)
+                .whenCompleteAsync(
+                    (session, throwable) -> {
+                      if (throwable != null) {
+                        handleConnectionError(throwable);
+                      } else if (session != null) {
+                        setupReceiver(session);
+                      } else if (!closed.get()) {
+                        handleConnectionError(
+                            new SocketException(
+                                "WebSocket connection failed without explicit error."));
+                      }
+                    })
+            : Objects.requireNonNull(sessionFuture);
+  }
+
+  private static CompletableFuture<AsyncSession> connect(
+      Client apiClient, String modelName, LiveConnectConfig connectConfig) {
+    return apiClient.async.live.connect(
+        Objects.requireNonNull(modelName), Objects.requireNonNull(connectConfig));
   }
 
   /** Configures the session to forward incoming messages to the response processor. */
@@ -170,6 +199,15 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
                     handled.set(true);
                   });
           message
+              .sessionResumptionUpdate()
+              .ifPresent(
+                  sessionResumptionUpdate -> {
+                    logger.debug(
+                        "Received live session resumption update: {}", sessionResumptionUpdate);
+                    emitter.onNext(createSessionResumptionUpdateResponse(sessionResumptionUpdate));
+                    handled.set(true);
+                  });
+          message
               .setupComplete()
               .ifPresent(
                   setupComplete -> {
@@ -195,6 +233,11 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
         .inputTranscription(serverContent.inputTranscription().orElse(null))
         .outputTranscription(serverContent.outputTranscription().orElse(null))
         .build();
+  }
+
+  private static LlmResponse createSessionResumptionUpdateResponse(
+      LiveServerSessionResumptionUpdate sessionResumptionUpdate) {
+    return LlmResponse.builder().liveSessionResumptionUpdate(sessionResumptionUpdate).build();
   }
 
   private static LlmResponse createToolCallResponse(LiveServerToolCall toolCall) {
@@ -253,18 +296,45 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
 
   @Override
   public Completable sendContent(Content content) {
+    return sendContent(content, true);
+  }
+
+  @Override
+  public Completable sendContent(Content content, boolean turnComplete) {
     Objects.requireNonNull(content, "content cannot be null");
 
     List<FunctionResponse> functionResponses = extractFunctionResponses(content);
     if (functionResponses.isEmpty()) {
+      if (shouldUseRealtimeTextInput(content)) {
+        return sendRealtimeText(content.text());
+      }
       return sendClientContentInternal(
           LiveSendClientContentParameters.builder()
               .turns(ImmutableList.of(content))
-              .turnComplete(true)
+              .turnComplete(turnComplete)
               .build());
     }
     return sendToolResponseInternal(
         LiveSendToolResponseParameters.builder().functionResponses(functionResponses).build());
+  }
+
+  private boolean shouldUseRealtimeTextInput(Content content) {
+    if (!isGemini31LiveModel() || isSystemContent(content)) {
+      return false;
+    }
+    if (content.parts().isEmpty() || content.parts().get().isEmpty()) {
+      return false;
+    }
+    return content.parts().get().stream().allMatch(part -> part.text().isPresent());
+  }
+
+  private boolean isGemini31LiveModel() {
+    String normalizedModelName = modelName.toLowerCase(Locale.ROOT);
+    return normalizedModelName.contains("gemini-3.1") && normalizedModelName.contains("live");
+  }
+
+  private static boolean isSystemContent(Content content) {
+    return content.role().map("system"::equals).orElse(false);
   }
 
   /** Extracts FunctionResponse parts from a Content object if all parts are FunctionResponses. */
@@ -287,9 +357,29 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
   public Completable sendRealtime(Blob blob) {
     return Completable.fromFuture(
         sessionFuture.thenCompose(
+            session -> session.sendRealtimeInput(realtimeInputParameters(blob))));
+  }
+
+  private LiveSendRealtimeInputParameters realtimeInputParameters(Blob blob) {
+    if (!isGemini31LiveModel()) {
+      return LiveSendRealtimeInputParameters.builder().media(blob).build();
+    }
+    String mimeType = blob.mimeType().orElse("").toLowerCase(Locale.ROOT);
+    if (mimeType.startsWith("audio/")) {
+      return LiveSendRealtimeInputParameters.builder().audio(blob).build();
+    }
+    if (mimeType.startsWith("image/") || mimeType.startsWith("video/")) {
+      return LiveSendRealtimeInputParameters.builder().video(blob).build();
+    }
+    return LiveSendRealtimeInputParameters.builder().media(blob).build();
+  }
+
+  private Completable sendRealtimeText(String text) {
+    return Completable.fromFuture(
+        sessionFuture.thenCompose(
             session ->
                 session.sendRealtimeInput(
-                    LiveSendRealtimeInputParameters.builder().media(blob).build())));
+                    LiveSendRealtimeInputParameters.builder().text(text).build())));
   }
 
   /** Helper to send client content parameters. */
