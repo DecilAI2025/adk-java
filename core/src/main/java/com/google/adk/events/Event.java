@@ -33,6 +33,7 @@ import com.google.genai.types.FunctionCall;
 import com.google.genai.types.FunctionResponse;
 import com.google.genai.types.GenerateContentResponseUsageMetadata;
 import com.google.genai.types.GroundingMetadata;
+import com.google.genai.types.LiveServerSessionResumptionUpdate;
 import com.google.genai.types.Transcription;
 import java.time.Instant;
 import java.util.List;
@@ -68,6 +69,7 @@ public class Event extends JsonBaseModel {
   private @Nullable String modelVersion;
   private @Nullable Transcription inputTranscription;
   private @Nullable Transcription outputTranscription;
+  private @Nullable LiveServerSessionResumptionUpdate liveSessionResumptionUpdate;
 
   private long timestamp;
 
@@ -297,6 +299,17 @@ public class Event extends JsonBaseModel {
     this.outputTranscription = outputTranscription;
   }
 
+  /** Live session resumption state update emitted by the Live API. */
+  @JsonProperty("liveSessionResumptionUpdate")
+  public Optional<LiveServerSessionResumptionUpdate> liveSessionResumptionUpdate() {
+    return Optional.ofNullable(liveSessionResumptionUpdate);
+  }
+
+  public void setLiveSessionResumptionUpdate(
+      @Nullable LiveServerSessionResumptionUpdate liveSessionResumptionUpdate) {
+    this.liveSessionResumptionUpdate = liveSessionResumptionUpdate;
+  }
+
   /** The timestamp of the event. */
   @JsonProperty("timestamp")
   public long timestamp() {
@@ -406,6 +419,7 @@ public class Event extends JsonBaseModel {
     private @Nullable String modelVersion;
     private @Nullable Transcription inputTranscription;
     private @Nullable Transcription outputTranscription;
+    private @Nullable LiveServerSessionResumptionUpdate liveSessionResumptionUpdate;
     private @Nullable Long timestamp;
 
     @JsonCreator
@@ -578,6 +592,13 @@ public class Event extends JsonBaseModel {
       return this;
     }
 
+    @CanIgnoreReturnValue
+    @JsonProperty("liveSessionResumptionUpdate")
+    public Builder liveSessionResumptionUpdate(@Nullable LiveServerSessionResumptionUpdate value) {
+      this.liveSessionResumptionUpdate = value;
+      return this;
+    }
+
     public Event build() {
       Event event = new Event();
       event.setId(id);
@@ -601,6 +622,7 @@ public class Event extends JsonBaseModel {
       event.setTimestamp(timestamp().orElseGet(() -> Instant.now().toEpochMilli()));
       event.setInputTranscription(inputTranscription);
       event.setOutputTranscription(outputTranscription);
+      event.setLiveSessionResumptionUpdate(liveSessionResumptionUpdate);
       return event;
     }
   }
@@ -637,7 +659,8 @@ public class Event extends JsonBaseModel {
             .customMetadata(this.customMetadata)
             .modelVersion(this.modelVersion)
             .inputTranscription(this.inputTranscription)
-            .outputTranscription(this.outputTranscription);
+            .outputTranscription(this.outputTranscription)
+            .liveSessionResumptionUpdate(this.liveSessionResumptionUpdate);
     if (this.timestamp != 0) {
       builder.timestamp(this.timestamp);
     }
@@ -672,7 +695,8 @@ public class Event extends JsonBaseModel {
         && Objects.equals(customMetadata, other.customMetadata)
         && Objects.equals(modelVersion, other.modelVersion)
         && Objects.equals(inputTranscription, other.inputTranscription)
-        && Objects.equals(outputTranscription, other.outputTranscription);
+        && Objects.equals(outputTranscription, other.outputTranscription)
+        && Objects.equals(liveSessionResumptionUpdate, other.liveSessionResumptionUpdate);
   }
 
   @Override
@@ -703,6 +727,7 @@ public class Event extends JsonBaseModel {
         modelVersion,
         inputTranscription,
         outputTranscription,
+        liveSessionResumptionUpdate,
         timestamp);
   }
 }

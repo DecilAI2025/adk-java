@@ -17,14 +17,25 @@
 package com.google.adk.models;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.genai.AsyncSession;
+import com.google.genai.types.Blob;
 import com.google.genai.types.Content;
 import com.google.genai.types.FunctionCall;
 import com.google.genai.types.GenerateContentResponseUsageMetadata;
+import com.google.genai.types.LiveConnectConfig;
+import com.google.genai.types.LiveSendClientContentParameters;
+import com.google.genai.types.LiveSendRealtimeInputParameters;
 import com.google.genai.types.LiveServerContent;
 import com.google.genai.types.LiveServerMessage;
+import com.google.genai.types.LiveServerSessionResumptionUpdate;
 import com.google.genai.types.LiveServerSetupComplete;
 import com.google.genai.types.LiveServerToolCall;
 import com.google.genai.types.LiveServerToolCallCancellation;
@@ -32,12 +43,120 @@ import com.google.genai.types.Part;
 import com.google.genai.types.UsageMetadata;
 import io.reactivex.rxjava3.observers.TestObserver;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentCaptor;
 
 @RunWith(JUnit4.class)
 public final class GeminiLlmConnectionTest {
+
+  @Test
+  public void sendContent_withGemini31LiveText_usesRealtimeTextInput() {
+    AsyncSession session = mock(AsyncSession.class);
+    when(session.sendRealtimeInput(any())).thenReturn(CompletableFuture.completedFuture(null));
+    GeminiLlmConnection connection = connectionForSession(session, "gemini-3.1-flash-live-preview");
+
+    connection.sendContent(Content.fromParts(Part.fromText("hello 3.1")), true).blockingAwait();
+
+    ArgumentCaptor<LiveSendRealtimeInputParameters> realtimeCaptor =
+        ArgumentCaptor.forClass(LiveSendRealtimeInputParameters.class);
+    verify(session).sendRealtimeInput(realtimeCaptor.capture());
+    assertThat(realtimeCaptor.getValue().text()).hasValue("hello 3.1");
+    verify(session, never()).sendClientContent(any());
+  }
+
+  @Test
+  public void sendContent_withGemini31LiveSystemContent_keepsClientContentPath() {
+    AsyncSession session = mock(AsyncSession.class);
+    when(session.sendClientContent(any())).thenReturn(CompletableFuture.completedFuture(null));
+    GeminiLlmConnection connection = connectionForSession(session, "gemini-3.1-flash-live-preview");
+    Content systemContent =
+        Content.builder()
+            .role("system")
+            .parts(ImmutableList.of(Part.fromText("hidden runtime control")))
+            .build();
+
+    connection.sendContent(systemContent, false).blockingAwait();
+
+    ArgumentCaptor<LiveSendClientContentParameters> clientContentCaptor =
+        ArgumentCaptor.forClass(LiveSendClientContentParameters.class);
+    verify(session).sendClientContent(clientContentCaptor.capture());
+    assertThat(clientContentCaptor.getValue().turns().get()).containsExactly(systemContent);
+    assertThat(clientContentCaptor.getValue().turnComplete()).hasValue(false);
+    verify(session, never()).sendRealtimeInput(any());
+  }
+
+  @Test
+  public void sendContent_withGemini25LiveText_keepsClientContentPath() {
+    AsyncSession session = mock(AsyncSession.class);
+    when(session.sendClientContent(any())).thenReturn(CompletableFuture.completedFuture(null));
+    GeminiLlmConnection connection = connectionForSession(session, "gemini-2.5-flash-live-preview");
+    Content content = Content.fromParts(Part.fromText("hello 2.5"));
+
+    connection.sendContent(content, true).blockingAwait();
+
+    ArgumentCaptor<LiveSendClientContentParameters> clientContentCaptor =
+        ArgumentCaptor.forClass(LiveSendClientContentParameters.class);
+    verify(session).sendClientContent(clientContentCaptor.capture());
+    assertThat(clientContentCaptor.getValue().turns().get()).containsExactly(content);
+    assertThat(clientContentCaptor.getValue().turnComplete()).hasValue(true);
+    verify(session, never()).sendRealtimeInput(any());
+  }
+
+  @Test
+  public void sendRealtime_withGemini31LiveAudio_usesAudioField() {
+    AsyncSession session = mock(AsyncSession.class);
+    when(session.sendRealtimeInput(any())).thenReturn(CompletableFuture.completedFuture(null));
+    GeminiLlmConnection connection = connectionForSession(session, "gemini-3.1-flash-live-preview");
+    Blob audio = Blob.builder().mimeType("audio/pcm;rate=16000").data(new byte[] {1}).build();
+
+    connection.sendRealtime(audio).blockingAwait();
+
+    ArgumentCaptor<LiveSendRealtimeInputParameters> realtimeCaptor =
+        ArgumentCaptor.forClass(LiveSendRealtimeInputParameters.class);
+    verify(session).sendRealtimeInput(realtimeCaptor.capture());
+    assertThat(realtimeCaptor.getValue().audio()).hasValue(audio);
+    assertThat(realtimeCaptor.getValue().media()).isEmpty();
+  }
+
+  @Test
+  public void sendRealtime_withGemini31LiveVideo_usesVideoField() {
+    AsyncSession session = mock(AsyncSession.class);
+    when(session.sendRealtimeInput(any())).thenReturn(CompletableFuture.completedFuture(null));
+    GeminiLlmConnection connection = connectionForSession(session, "gemini-3.1-flash-live-preview");
+    Blob video = Blob.builder().mimeType("image/jpeg").data(new byte[] {1}).build();
+
+    connection.sendRealtime(video).blockingAwait();
+
+    ArgumentCaptor<LiveSendRealtimeInputParameters> realtimeCaptor =
+        ArgumentCaptor.forClass(LiveSendRealtimeInputParameters.class);
+    verify(session).sendRealtimeInput(realtimeCaptor.capture());
+    assertThat(realtimeCaptor.getValue().video()).hasValue(video);
+    assertThat(realtimeCaptor.getValue().media()).isEmpty();
+  }
+
+  @Test
+  public void sendRealtime_withGemini25Live_keepsMediaField() {
+    AsyncSession session = mock(AsyncSession.class);
+    when(session.sendRealtimeInput(any())).thenReturn(CompletableFuture.completedFuture(null));
+    GeminiLlmConnection connection = connectionForSession(session, "gemini-2.5-flash-live-preview");
+    Blob audio = Blob.builder().mimeType("audio/pcm;rate=24000").data(new byte[] {1}).build();
+
+    connection.sendRealtime(audio).blockingAwait();
+
+    ArgumentCaptor<LiveSendRealtimeInputParameters> realtimeCaptor =
+        ArgumentCaptor.forClass(LiveSendRealtimeInputParameters.class);
+    verify(session).sendRealtimeInput(realtimeCaptor.capture());
+    assertThat(realtimeCaptor.getValue().media()).hasValue(audio);
+    assertThat(realtimeCaptor.getValue().audio()).isEmpty();
+  }
+
+  private static GeminiLlmConnection connectionForSession(AsyncSession session, String modelName) {
+    return new GeminiLlmConnection(
+        CompletableFuture.completedFuture(session), modelName, LiveConnectConfig.builder().build());
+  }
 
   @Test
   public void convertToServerResponse_withInterruptedTrue_mapsInterruptedField() {
@@ -261,6 +380,25 @@ public final class GeminiLlmConnectionTest {
 
     testObserver.assertNoValues();
     testObserver.assertComplete();
+  }
+
+  @Test
+  public void convertToServerResponse_withSessionResumptionUpdate_mapsUpdate() {
+    LiveServerSessionResumptionUpdate update =
+        LiveServerSessionResumptionUpdate.builder()
+            .newHandle("resume-handle")
+            .resumable(true)
+            .lastConsumedClientMessageIndex(17L)
+            .build();
+    LiveServerMessage message = LiveServerMessage.builder().sessionResumptionUpdate(update).build();
+
+    TestObserver<LlmResponse> testObserver = new TestObserver<>();
+
+    GeminiLlmConnection.convertToServerResponse(message).subscribe(testObserver);
+
+    testObserver.assertValueCount(1);
+    testObserver.assertComplete();
+    assertThat(testObserver.values().get(0).liveSessionResumptionUpdate()).hasValue(update);
   }
 
   @Test
