@@ -643,7 +643,9 @@ public abstract class BaseLlmFlow implements BaseFlow {
                               .concatMapCompletable(
                                   request -> {
                                     if (request.content().isPresent()) {
-                                      return connection.sendContent(request.content().get());
+                                      return connection.sendContent(
+                                          request.content().get(),
+                                          request.turnComplete().orElse(true));
                                     } else if (request.blob().isPresent()) {
                                       return connection.sendRealtime(request.blob().get());
                                     }
@@ -758,7 +760,8 @@ public abstract class BaseLlmFlow implements BaseFlow {
             || updatedResponse.usageMetadata().isEmpty())
         && updatedResponse.inputTranscription().isEmpty()
         && updatedResponse.outputTranscription().isEmpty()
-        && updatedResponse.groundingMetadata().isEmpty()) {
+        && updatedResponse.groundingMetadata().isEmpty()
+        && updatedResponse.liveSessionResumptionUpdate().isEmpty()) {
       return processorEvents;
     }
 
@@ -880,7 +883,8 @@ public abstract class BaseLlmFlow implements BaseFlow {
             .usageMetadata(llmResponse.usageMetadata().orElse(null))
             .modelVersion(llmResponse.modelVersion().orElse(null))
             .inputTranscription(llmResponse.inputTranscription().orElse(null))
-            .outputTranscription(llmResponse.outputTranscription().orElse(null));
+            .outputTranscription(llmResponse.outputTranscription().orElse(null))
+            .liveSessionResumptionUpdate(llmResponse.liveSessionResumptionUpdate().orElse(null));
 
     Event event = eventBuilder.build();
 

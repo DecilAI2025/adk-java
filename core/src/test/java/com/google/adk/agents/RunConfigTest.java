@@ -24,6 +24,7 @@ import com.google.genai.types.AudioTranscriptionConfig;
 import com.google.genai.types.AvatarConfig;
 import com.google.genai.types.CustomizedAvatar;
 import com.google.genai.types.Modality;
+import com.google.genai.types.SessionResumptionConfig;
 import com.google.genai.types.SpeechConfig;
 import java.util.Optional;
 import org.junit.Test;
@@ -38,6 +39,8 @@ public final class RunConfigTest {
   public void testBuilderWithVariousValues() {
     SpeechConfig speechConfig = SpeechConfig.builder().build();
     AudioTranscriptionConfig audioTranscriptionConfig = AudioTranscriptionConfig.builder().build();
+    SessionResumptionConfig sessionResumption =
+        SessionResumptionConfig.builder().transparent(true).handle("resume-handle").build();
 
     RunConfig runConfig =
         RunConfig.builder()
@@ -47,6 +50,7 @@ public final class RunConfigTest {
             .setStreamingMode(RunConfig.StreamingMode.SSE)
             .setOutputAudioTranscription(audioTranscriptionConfig)
             .setInputAudioTranscription(audioTranscriptionConfig)
+            .sessionResumption(sessionResumption)
             .setMaxLlmCalls(10)
             .build();
 
@@ -56,6 +60,7 @@ public final class RunConfigTest {
     assertThat(runConfig.streamingMode()).isEqualTo(RunConfig.StreamingMode.SSE);
     assertThat(runConfig.outputAudioTranscription()).isEqualTo(audioTranscriptionConfig);
     assertThat(runConfig.inputAudioTranscription()).isEqualTo(audioTranscriptionConfig);
+    assertThat(runConfig.sessionResumption()).isEqualTo(sessionResumption);
     assertThat(runConfig.maxLlmCalls()).isEqualTo(10);
   }
 
@@ -70,6 +75,7 @@ public final class RunConfigTest {
     assertThat(runConfig.streamingMode()).isEqualTo(RunConfig.StreamingMode.NONE);
     assertThat(runConfig.outputAudioTranscription()).isNull();
     assertThat(runConfig.inputAudioTranscription()).isNull();
+    assertThat(runConfig.sessionResumption()).isNull();
     assertThat(runConfig.maxLlmCalls()).isEqualTo(500);
     assertThat(runConfig.autoCreateSession()).isFalse();
     assertThat(runConfig.groupFunctionResponsesInHistoryOverride()).isEmpty();
@@ -103,6 +109,17 @@ public final class RunConfigTest {
     RunConfig cleared =
         RunConfig.builder(source).groupFunctionResponsesInHistoryOverride(Optional.empty()).build();
     assertThat(cleared.groupFunctionResponsesInHistoryOverride()).isEmpty();
+  }
+
+  @Test
+  public void testBuilderCopiesSessionResumption() {
+    SessionResumptionConfig sessionResumption =
+        SessionResumptionConfig.builder().transparent(true).handle("resume-handle").build();
+    RunConfig original = RunConfig.builder().sessionResumption(sessionResumption).build();
+
+    RunConfig copy = RunConfig.builder(original).build();
+
+    assertThat(copy.sessionResumption()).isEqualTo(sessionResumption);
   }
 
   @Test
