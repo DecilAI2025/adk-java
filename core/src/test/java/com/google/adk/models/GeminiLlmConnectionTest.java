@@ -17,9 +17,15 @@
 package com.google.adk.models;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.genai.types.Blob;
 import com.google.genai.types.Content;
 import com.google.genai.types.FunctionCall;
 import com.google.genai.types.GenerateContentResponseUsageMetadata;
@@ -28,6 +34,7 @@ import com.google.genai.types.LiveSendRealtimeInputParameters;
 import com.google.genai.types.LiveSendToolResponseParameters;
 import com.google.genai.types.LiveServerContent;
 import com.google.genai.types.LiveServerMessage;
+import com.google.genai.types.LiveServerSessionResumptionUpdate;
 import com.google.genai.types.LiveServerSetupComplete;
 import com.google.genai.types.LiveServerToolCall;
 import com.google.genai.types.LiveServerToolCallCancellation;
@@ -43,9 +50,117 @@ import java.util.function.Consumer;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentCaptor;
 
 @RunWith(JUnit4.class)
 public final class GeminiLlmConnectionTest {
+
+  @Test
+  public void sendContent_withGemini31LiveText_usesRealtimeTextInput() {
+    GeminiLiveTransport transport = mock(GeminiLiveTransport.class);
+    when(transport.sendRealtimeInput(any())).thenReturn(CompletableFuture.completedFuture(null));
+    GeminiLlmConnection connection = connectionForTransport(transport, "gemini-3.1-flash-live");
+
+    connection.sendContent(Content.fromParts(Part.fromText("hello 3.1")), true).blockingAwait();
+
+    ArgumentCaptor<LiveSendRealtimeInputParameters> realtimeCaptor =
+        ArgumentCaptor.forClass(LiveSendRealtimeInputParameters.class);
+    verify(transport).sendRealtimeInput(realtimeCaptor.capture());
+    assertThat(realtimeCaptor.getValue().text()).hasValue("hello 3.1");
+    verify(transport, never()).sendClientContent(any());
+  }
+
+  @Test
+  public void sendContent_withGemini31LiveIncompleteSystemContent_keepsClientContentPath() {
+    GeminiLiveTransport transport = mock(GeminiLiveTransport.class);
+    when(transport.sendClientContent(any())).thenReturn(CompletableFuture.completedFuture(null));
+    GeminiLlmConnection connection = connectionForTransport(transport, "gemini-3.1-flash-live");
+    Content systemContent =
+        Content.builder()
+            .role("system")
+            .parts(ImmutableList.of(Part.fromText("hidden runtime control")))
+            .build();
+
+    connection.sendContent(systemContent, false).blockingAwait();
+
+    ArgumentCaptor<LiveSendClientContentParameters> clientContentCaptor =
+        ArgumentCaptor.forClass(LiveSendClientContentParameters.class);
+    verify(transport).sendClientContent(clientContentCaptor.capture());
+    assertThat(clientContentCaptor.getValue().turns().get()).containsExactly(systemContent);
+    assertThat(clientContentCaptor.getValue().turnComplete()).hasValue(false);
+    verify(transport, never()).sendRealtimeInput(any());
+  }
+
+  @Test
+  public void sendContent_withGemini25LiveText_keepsClientContentPath() {
+    GeminiLiveTransport transport = mock(GeminiLiveTransport.class);
+    when(transport.sendClientContent(any())).thenReturn(CompletableFuture.completedFuture(null));
+    GeminiLlmConnection connection = connectionForTransport(transport, "gemini-2.5-flash-live");
+    Content content = Content.fromParts(Part.fromText("hello 2.5"));
+
+    connection.sendContent(content, true).blockingAwait();
+
+    ArgumentCaptor<LiveSendClientContentParameters> clientContentCaptor =
+        ArgumentCaptor.forClass(LiveSendClientContentParameters.class);
+    verify(transport).sendClientContent(clientContentCaptor.capture());
+    assertThat(clientContentCaptor.getValue().turns().get()).containsExactly(content);
+    assertThat(clientContentCaptor.getValue().turnComplete()).hasValue(true);
+    verify(transport, never()).sendRealtimeInput(any());
+  }
+
+  @Test
+  public void sendRealtime_withGemini31LiveAudio_usesAudioField() {
+    GeminiLiveTransport transport = mock(GeminiLiveTransport.class);
+    when(transport.sendRealtimeInput(any())).thenReturn(CompletableFuture.completedFuture(null));
+    GeminiLlmConnection connection = connectionForTransport(transport, "gemini-3.1-flash-live");
+    Blob audio = Blob.builder().mimeType("audio/pcm;rate=16000").data(new byte[] {1}).build();
+
+    connection.sendRealtime(audio).blockingAwait();
+
+    ArgumentCaptor<LiveSendRealtimeInputParameters> realtimeCaptor =
+        ArgumentCaptor.forClass(LiveSendRealtimeInputParameters.class);
+    verify(transport).sendRealtimeInput(realtimeCaptor.capture());
+    assertThat(realtimeCaptor.getValue().audio()).hasValue(audio);
+    assertThat(realtimeCaptor.getValue().media()).isEmpty();
+  }
+
+  @Test
+  public void sendRealtime_withGemini31LiveVideo_usesVideoField() {
+    GeminiLiveTransport transport = mock(GeminiLiveTransport.class);
+    when(transport.sendRealtimeInput(any())).thenReturn(CompletableFuture.completedFuture(null));
+    GeminiLlmConnection connection = connectionForTransport(transport, "gemini-3.1-flash-live");
+    Blob video = Blob.builder().mimeType("image/jpeg").data(new byte[] {1}).build();
+
+    connection.sendRealtime(video).blockingAwait();
+
+    ArgumentCaptor<LiveSendRealtimeInputParameters> realtimeCaptor =
+        ArgumentCaptor.forClass(LiveSendRealtimeInputParameters.class);
+    verify(transport).sendRealtimeInput(realtimeCaptor.capture());
+    assertThat(realtimeCaptor.getValue().video()).hasValue(video);
+    assertThat(realtimeCaptor.getValue().media()).isEmpty();
+  }
+
+  @Test
+  public void sendRealtime_withGemini25Live_keepsMediaField() {
+    GeminiLiveTransport transport = mock(GeminiLiveTransport.class);
+    when(transport.sendRealtimeInput(any())).thenReturn(CompletableFuture.completedFuture(null));
+    GeminiLlmConnection connection = connectionForTransport(transport, "gemini-2.5-flash-live");
+    Blob audio = Blob.builder().mimeType("audio/pcm;rate=24000").data(new byte[] {1}).build();
+
+    connection.sendRealtime(audio).blockingAwait();
+
+    ArgumentCaptor<LiveSendRealtimeInputParameters> realtimeCaptor =
+        ArgumentCaptor.forClass(LiveSendRealtimeInputParameters.class);
+    verify(transport).sendRealtimeInput(realtimeCaptor.capture());
+    assertThat(realtimeCaptor.getValue().media()).hasValue(audio);
+    assertThat(realtimeCaptor.getValue().audio()).isEmpty();
+  }
+
+  private static GeminiLlmConnection connectionForTransport(
+      GeminiLiveTransport transport, String modelName) {
+    when(transport.receive(any(), any())).thenReturn(CompletableFuture.completedFuture(null));
+    return new GeminiLlmConnection(CompletableFuture.completedFuture(transport), modelName);
+  }
 
   @Test
   public void convertToServerResponse_withInterruptedTrue_mapsInterruptedField() {
@@ -269,6 +384,46 @@ public final class GeminiLlmConnectionTest {
 
     testObserver.assertNoValues();
     testObserver.assertComplete();
+  }
+
+  @Test
+  public void convertToServerResponse_withSessionResumptionUpdate_mapsContentlessUpdate() {
+    LiveServerSessionResumptionUpdate update =
+        LiveServerSessionResumptionUpdate.builder()
+            .newHandle("opaque-resume-handle")
+            .resumable(true)
+            .lastConsumedClientMessageIndex(17L)
+            .build();
+    LiveServerMessage message = LiveServerMessage.builder().sessionResumptionUpdate(update).build();
+
+    TestObserver<LlmResponse> testObserver = new TestObserver<>();
+    GeminiLlmConnection.convertToServerResponse(message).subscribe(testObserver);
+
+    testObserver.assertValueCount(1);
+    testObserver.assertComplete();
+    assertThat(testObserver.values().get(0).content()).isEmpty();
+    assertThat(testObserver.values().get(0).liveSessionResumptionUpdate()).hasValue(update);
+  }
+
+  @Test
+  public void diagnosticMessageTypes_reportsPresenceWithoutPayloadOrHandle() {
+    LiveServerMessage message =
+        LiveServerMessage.builder()
+            .serverContent(
+                LiveServerContent.builder()
+                    .modelTurn(Content.fromParts(Part.fromText("governed-provider-body")))
+                    .build())
+            .sessionResumptionUpdate(
+                LiveServerSessionResumptionUpdate.builder()
+                    .newHandle("opaque-resume-handle")
+                    .build())
+            .build();
+
+    ImmutableList<String> diagnosticTypes = GeminiLlmConnection.diagnosticMessageTypes(message);
+
+    assertThat(diagnosticTypes).containsExactly("server_content", "session_resumption_update");
+    assertThat(diagnosticTypes.toString()).doesNotContain("governed-provider-body");
+    assertThat(diagnosticTypes.toString()).doesNotContain("opaque-resume-handle");
   }
 
   @Test

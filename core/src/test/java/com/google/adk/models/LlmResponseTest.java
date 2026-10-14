@@ -29,6 +29,7 @@ import com.google.genai.types.FinishReason;
 import com.google.genai.types.FunctionCall;
 import com.google.genai.types.GenerateContentResponse;
 import com.google.genai.types.GenerateContentResponseUsageMetadata;
+import com.google.genai.types.LiveServerSessionResumptionUpdate;
 import com.google.genai.types.Part;
 import com.google.genai.types.Transcription;
 import org.junit.Before;
@@ -203,6 +204,34 @@ public final class LlmResponseTest {
 
     assertThat(response.inputTranscription()).isEmpty();
     assertThat(response.outputTranscription()).isEmpty();
+  }
+
+  @Test
+  public void testSerializationAndDeserialization_withLiveSessionResumptionUpdate()
+      throws JsonProcessingException {
+    LiveServerSessionResumptionUpdate update =
+        LiveServerSessionResumptionUpdate.builder()
+            .newHandle("resume-handle")
+            .resumable(true)
+            .lastConsumedClientMessageIndex(17L)
+            .build();
+    LlmResponse originalResponse =
+        LlmResponse.builder().liveSessionResumptionUpdate(update).build();
+
+    JsonNode jsonNode = objectMapper.readTree(originalResponse.toJson());
+
+    assertThat(jsonNode.get("liveSessionResumptionUpdate").get("newHandle").asText())
+        .isEqualTo("resume-handle");
+    assertThat(
+            jsonNode
+                .get("liveSessionResumptionUpdate")
+                .get("lastConsumedClientMessageIndex")
+                .asLong())
+        .isEqualTo(17L);
+    LlmResponse deserializedResponse =
+        LlmResponse.fromJsonString(originalResponse.toJson(), LlmResponse.class);
+    assertThat(deserializedResponse).isEqualTo(originalResponse);
+    assertThat(deserializedResponse.liveSessionResumptionUpdate()).hasValue(update);
   }
 
   @Test
