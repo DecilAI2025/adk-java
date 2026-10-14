@@ -23,6 +23,7 @@ import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import com.google.genai.types.AudioTranscriptionConfig;
 import com.google.genai.types.AvatarConfig;
 import com.google.genai.types.Modality;
+import com.google.genai.types.SessionResumptionConfig;
 import com.google.genai.types.SpeechConfig;
 import java.util.Map;
 import java.util.Optional;
@@ -84,6 +85,8 @@ public abstract class RunConfig {
 
   public abstract @Nullable AudioTranscriptionConfig inputAudioTranscription();
 
+  public abstract @Nullable SessionResumptionConfig sessionResumption();
+
   public abstract int maxLlmCalls();
 
   public abstract boolean autoCreateSession();
@@ -144,6 +147,7 @@ public abstract class RunConfig {
         .avatarConfig(runConfig.avatarConfig())
         .outputAudioTranscription(runConfig.outputAudioTranscription())
         .inputAudioTranscription(runConfig.inputAudioTranscription())
+        .sessionResumption(runConfig.sessionResumption())
         .autoCreateSession(runConfig.autoCreateSession())
         .groupFunctionResponsesInHistoryOverride(
             runConfig.groupFunctionResponsesInHistoryOverride())
@@ -223,6 +227,9 @@ public abstract class RunConfig {
     @CanIgnoreReturnValue
     public abstract Builder inputAudioTranscription(
         @Nullable AudioTranscriptionConfig inputAudioTranscription);
+
+    @CanIgnoreReturnValue
+    public abstract Builder sessionResumption(@Nullable SessionResumptionConfig sessionResumption);
 
     @Deprecated
     @CanIgnoreReturnValue

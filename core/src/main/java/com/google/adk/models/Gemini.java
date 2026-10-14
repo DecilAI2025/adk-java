@@ -339,9 +339,10 @@ public class Gemini extends BaseLlm {
     String effectiveModelName = llmRequest.model().orElse(model());
 
     logger.debug("Connecting to model {}", effectiveModelName);
-    logger.trace("Connection Config: {}", liveConnectConfig);
+    logger.trace("Live connection config prepared.");
 
-    return new GeminiLlmConnection(connectLiveTransport(effectiveModelName, liveConnectConfig));
+    return new GeminiLlmConnection(
+        connectLiveTransport(effectiveModelName, liveConnectConfig), effectiveModelName);
   }
 
   /**
