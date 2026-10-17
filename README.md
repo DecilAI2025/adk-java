@@ -28,6 +28,20 @@ debugging, versioning, and deployment anywhere – from your laptop to the cloud
 
 --------------------------------------------------------------------------------
 
+## Decil/Virtis fork
+
+The reviewed Virtis dependency is immutable commit
+`c407e0695d9c001fe9c393372fa43a3e4b75fbd0`, derived directly from upstream
+`923d602e51aea8be4811676afb57d6264f4fe877`. The upstream base already contains
+Gemini GenerateContent context caching; this fork adds only the five retained
+Virtis Live transport capabilities.
+
+See [VIRTIS_LIVE_PATCH.md](VIRTIS_LIVE_PATCH.md) for the exact patch inventory,
+verification commands, provider and cache restrictions, and the boundary
+between this library, Gemini Backend, and Platform. Consumers must pin the full
+commit SHA. A branch, moving tag, or local Maven artifact is not an accepted
+Virtis runtime dependency.
+
 ## ✨ Key Features
 
 -   **Rich Tool Ecosystem**: Utilize pre-built tools, custom functions, OpenAPI

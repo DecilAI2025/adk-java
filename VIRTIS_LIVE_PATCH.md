@@ -22,6 +22,52 @@ The upstream `GeminiLiveTransport`, GenerateContent, and context-cache
 implementations remain authoritative. Live WebSocket transport does not invoke
 GenerateContent context-cache management.
 
+## Runtime and ownership boundary
+
+This repository remains an ADK library, not a product control plane. The
+reviewed fork does not contain Virtis tenants, scoring policy, evidence
+authority, agent installations, provider-route policy, PII decisions, budgets,
+or business outcomes.
+
+| Concern | ADK and this fork | Gemini Backend | Platform |
+| --- | --- | --- | --- |
+| Agent execution | Runs upstream agent graphs, sessions, tools, structured input/output schemas, and subagents | Validates the governed runtime request and invokes ADK | Selects product policy and owns the durable product workflow |
+| Evidence and multimodal input | Carries standard GenAI `Content` and `Part` values; the Live patch maps Gemini 3.1 realtime text/audio/video without changing Gemini 2.5 media behavior | Resolves authorized artifacts and constructs provider-safe ADK inputs | Owns canonical messages, artifacts, citations, retention, and access decisions |
+| Context cache | Owns optional Gemini GenerateContent cache fingerprints, resources, reuse, expiry, and pre-dispatch fallback | Enables or omits `ContextCacheConfig` only after its authorization and policy checks | Publishes only the governed cache on/off selection; it does not supply a cache key, prefix, or provider resource |
+| Results | Returns model events, schema-checked agent output, and observed provider usage | Persists the governed runtime result and safe execution receipts | Owns final scores and other business decisions |
+
+The structured schemas, session services, and sequential, parallel, loop, and
+LLM subagent composition in this repository are upstream ADK capabilities. The
+Virtis patch neither creates a second Platform conversation store nor makes an
+ADK session or cache a source of canonical evidence. Each application remains
+responsible for choosing and isolating its session service.
+
+### Context-cache restrictions
+
+Context caching is opt-in through `App.contextCacheConfig`; without that config,
+ADK does not create or reference a cache. It applies only to Gemini
+`generateContent`, not Live WebSocket connections or non-Gemini model adapters.
+
+A cached prefix can contain the exact system instruction, tools, tool config,
+and leading contents. Its fingerprint also binds the model and Gemini API or
+Vertex backend (including Vertex project and location). When a cached resource
+is referenced, those cached instruction and tool fields are not resent on the
+GenerateContent request because the provider treats the cached values as
+authoritative. ADK therefore does not promise reuse across different agents,
+instructions, tools, backends, or sessions, and it never weakens an instruction
+or unions tool authority to obtain a hit.
+
+Cache eligibility and hits are optimizations, not execution authority. An
+ineligible or changed prefix runs uncached. A cache-create failure before model
+dispatch falls back to the same uncached logical request. A cache-delete failure
+does not block refresh, while thread interruption still propagates. Only
+provider-reported cached-input token usage proves a hit. This library does not
+estimate prices or convert usage to USD for cache selection.
+
+Provider credentials are supplied by the embedding application through the
+normal Gemini API or Vertex client configuration. They are not stored in this
+fork, cache metadata, session events, or diagnostics.
+
 ## Verification
 
 Focused and complete local gates are:
@@ -31,19 +77,24 @@ Focused and complete local gates are:
 env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY -u GOOGLE_API_KEY -u GEMINI_API_KEY ./mvnw test
 ```
 
-Both gates passed on 2026-10-14. The focused gate completed with `BUILD
-SUCCESS`; its primary selected suite ran 273 tests with zero failures, errors,
-or skips. The complete gate completed all 19 reactor modules with `BUILD
-SUCCESS` in 1:45; the core module's primary suite ran 2,359 tests with zero
-failures or errors and 24 skips. Provider API keys were removed from the
-complete-gate environment, so no live provider action was attempted.
+Both gates passed again on 2026-10-17 at commit
+`c407e0695d9c001fe9c393372fa43a3e4b75fbd0`. The focused command completed with
+`BUILD SUCCESS`: its primary selected suite ran 273 tests in each of the
+configured default and basic executions, and all configured executions totaled
+573 tests with zero failures or errors and one environment-dependent skip. The
+complete command completed all 19 reactor modules with `BUILD SUCCESS`; its
+configured executions totaled 5,525 tests with zero failures or errors and 76
+environment-dependent or opt-in skips. The commands ran with external provider
+API keys, Google application credentials, and Google project/location variables
+unset; no ADC, cloud, or live provider action was invoked.
 
-Only the reviewed commit containing this inventory may be published and
-consumed through the immutable JitPack coordinates
-`com.github.DecilAI2025.adk-java:google-adk:<full-commit-sha>`. The publication
-handoff records that commit's full SHA and resolution proof after Git creates
-the commit object. A branch name, moving reference, tag, or local Maven
-artifact is not an acceptable dependency or rollback/forward mechanism.
+The reviewed runtime artifact remains immutable commit
+`c407e0695d9c001fe9c393372fa43a3e4b75fbd0`. It may be consumed through the
+JitPack coordinates
+`com.github.DecilAI2025.adk-java:google-adk:c407e0695d9c001fe9c393372fa43a3e4b75fbd0`.
+A branch name, moving reference, tag, or local Maven artifact is not an
+acceptable dependency or rollback/forward mechanism. A later fork artifact
+requires its own reviewed immutable commit and resolution proof.
 
 ## Patch inventory versus exact upstream base
 
