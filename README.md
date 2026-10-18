@@ -30,17 +30,21 @@ debugging, versioning, and deployment anywhere – from your laptop to the cloud
 
 ## Decil/Virtis fork
 
-The reviewed Virtis dependency is immutable commit
-`c407e0695d9c001fe9c393372fa43a3e4b75fbd0`, derived directly from upstream
-`923d602e51aea8be4811676afb57d6264f4fe877`. The upstream base already contains
-Gemini GenerateContent context caching; this fork adds only the five retained
-Virtis Live transport capabilities.
+The reviewed Virtis `v1.12.0` dependency line starts at the immutable upstream
+release tag commit `4f2178cce329aa2ce7ffb94e2be399f5dfd370c2` and applies the
+five retained Virtis Live transport capabilities in immutable code commit
+`a671d98e9861dc438f4b28a81a3c490865389fbc`. Upstream `v1.12.0` already
+contains Gemini GenerateContent context caching and the other fixes published
+in that release.
 
 See [VIRTIS_LIVE_PATCH.md](VIRTIS_LIVE_PATCH.md) for the exact patch inventory,
 verification commands, provider and cache restrictions, and the boundary
 between this library, Gemini Backend, and Platform. Consumers must pin the full
-commit SHA. A branch, moving tag, or local Maven artifact is not an accepted
-Virtis runtime dependency.
+code commit SHA. The human-readable branch `runtime-control-v1.12.0` is only a
+rollback/forward locator; a branch, moving tag, or local Maven artifact is not
+an accepted Virtis runtime dependency. A future upstream upgrade must start a
+separate reviewed version line from an exact release-tag commit rather than
+moving this `v1.12.0` line or rebasing it onto upstream `main`.
 
 ## ✨ Key Features
 

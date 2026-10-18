@@ -1,9 +1,12 @@
 # Virtis Live runtime patch
 
-This fork lane is based on exact upstream `google/adk-java` commit
-`923d602e51aea8be4811676afb57d6264f4fe877`. That base contains the upstream
-context-cache change from PR `#1626`, commit
-`68914c59e254e50fece01711d5213d3c03b07090`.
+This fork lane is based on the exact upstream `google/adk-java` `v1.12.0`
+release-tag commit `4f2178cce329aa2ce7ffb94e2be399f5dfd370c2`. That release
+contains the upstream context-cache change from PR `#1626`, commit
+`68914c59e254e50fece01711d5213d3c03b07090`, plus the complete published
+`v1.12.0` release history. The human-readable branch is
+`runtime-control-v1.12.0`; consumers must use the immutable code commit below,
+not the branch name.
 
 The lane ports only the five Live capabilities retained by the frozen Virtis
 runtime contract:
@@ -77,21 +80,19 @@ Focused and complete local gates are:
 env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY -u GOOGLE_API_KEY -u GEMINI_API_KEY ./mvnw test
 ```
 
-Both gates passed again on 2026-10-17 at commit
-`c407e0695d9c001fe9c393372fa43a3e4b75fbd0`. The focused command completed with
-`BUILD SUCCESS`: its primary selected suite ran 273 tests in each of the
-configured default and basic executions, and all configured executions totaled
-573 tests with zero failures or errors and one environment-dependent skip. The
-complete command completed all 19 reactor modules with `BUILD SUCCESS`; its
-configured executions totaled 5,525 tests with zero failures or errors and 76
-environment-dependent or opt-in skips. The commands ran with external provider
-API keys, Google application credentials, and Google project/location variables
-unset; no ADC, cloud, or live provider action was invoked.
+Both gates passed again on 2026-10-18 for immutable code commit
+`a671d98e9861dc438f4b28a81a3c490865389fbc` on the `v1.12.0` line. The focused
+command completed with `BUILD SUCCESS`; its primary selected suite ran 273
+tests with zero failures or errors, and the additional configured executions
+were green with one environment-dependent skip. The complete command completed
+all 19 reactor modules with `BUILD SUCCESS`. The commands ran with external
+provider API keys, Google application credentials, and Google project/location
+variables unset; no ADC, cloud, or live provider action was invoked.
 
 The reviewed runtime artifact remains immutable commit
-`c407e0695d9c001fe9c393372fa43a3e4b75fbd0`. It may be consumed through the
+`a671d98e9861dc438f4b28a81a3c490865389fbc`. It may be consumed through the
 JitPack coordinates
-`com.github.DecilAI2025.adk-java:google-adk:c407e0695d9c001fe9c393372fa43a3e4b75fbd0`.
+`com.github.DecilAI2025.adk-java:google-adk:a671d98e9861dc438f4b28a81a3c490865389fbc`.
 A branch name, moving reference, tag, or local Maven artifact is not an
 acceptable dependency or rollback/forward mechanism. A later fork artifact
 requires its own reviewed immutable commit and resolution proof.
@@ -133,4 +134,7 @@ For a later upstream base, compare all five end-to-end boundaries and remove a
 patch only when upstream provides equivalent behavior and the corresponding
 regression passes without the fork change. A similarly named continuation,
 pause/resume, or context-cache API is not equivalent proof of provider Live
-session resumption.
+session resumption. Do not advance this line to upstream `main` or silently
+retarget `runtime-control-v1.12.0`; create a separately named version line from
+the exact future release-tag commit and repin consumers only after its focused,
+full-reactor, and immutable-artifact resolution gates pass.
