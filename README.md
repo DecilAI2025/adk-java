@@ -33,7 +33,7 @@ debugging, versioning, and deployment anywhere – from your laptop to the cloud
 The reviewed Virtis `v1.12.0` dependency line starts at the immutable upstream
 release tag commit `4f2178cce329aa2ce7ffb94e2be399f5dfd370c2` and applies the
 five retained Virtis Live transport capabilities in immutable code commit
-`a671d98e9861dc438f4b28a81a3c490865389fbc`. Upstream `v1.12.0` already
+`a671d98eb7731d6e73accc9ddcaf47f1cedad399`. Upstream `v1.12.0` already
 contains Gemini GenerateContent context caching and the other fixes published
 in that release.
 

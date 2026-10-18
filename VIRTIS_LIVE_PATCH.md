@@ -81,7 +81,7 @@ env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY -u GOOGLE_API_KEY -u GEMINI_API_KEY .
 ```
 
 Both gates passed again on 2026-10-18 for immutable code commit
-`a671d98e9861dc438f4b28a81a3c490865389fbc` on the `v1.12.0` line. The focused
+`a671d98eb7731d6e73accc9ddcaf47f1cedad399` on the `v1.12.0` line. The focused
 command completed with `BUILD SUCCESS`; its primary selected suite ran 273
 tests with zero failures or errors, and the additional configured executions
 were green with one environment-dependent skip. The complete command completed
@@ -90,9 +90,9 @@ provider API keys, Google application credentials, and Google project/location
 variables unset; no ADC, cloud, or live provider action was invoked.
 
 The reviewed runtime artifact remains immutable commit
-`a671d98e9861dc438f4b28a81a3c490865389fbc`. It may be consumed through the
+`a671d98eb7731d6e73accc9ddcaf47f1cedad399`. It may be consumed through the
 JitPack coordinates
-`com.github.DecilAI2025.adk-java:google-adk:a671d98e9861dc438f4b28a81a3c490865389fbc`.
+`com.github.DecilAI2025.adk-java:google-adk:a671d98eb7731d6e73accc9ddcaf47f1cedad399`.
 A branch name, moving reference, tag, or local Maven artifact is not an
 acceptable dependency or rollback/forward mechanism. A later fork artifact
 requires its own reviewed immutable commit and resolution proof.
