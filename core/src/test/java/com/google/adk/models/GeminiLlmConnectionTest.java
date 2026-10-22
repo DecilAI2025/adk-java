@@ -33,6 +33,7 @@ import com.google.genai.types.LiveSendClientContentParameters;
 import com.google.genai.types.LiveSendRealtimeInputParameters;
 import com.google.genai.types.LiveSendToolResponseParameters;
 import com.google.genai.types.LiveServerContent;
+import com.google.genai.types.LiveServerGoAway;
 import com.google.genai.types.LiveServerMessage;
 import com.google.genai.types.LiveServerSessionResumptionUpdate;
 import com.google.genai.types.LiveServerSetupComplete;
@@ -44,6 +45,8 @@ import io.reactivex.rxjava3.observers.TestObserver;
 import io.reactivex.rxjava3.subscribers.TestSubscriber;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
@@ -503,6 +506,52 @@ public final class GeminiLlmConnectionTest {
 
     subscriber.assertComplete();
     subscriber.assertNoErrors();
+  }
+
+  @Test
+  public void convertToServerResponse_goAwayIsTypedAndNotAnUnknownMessage() {
+    LiveServerGoAway goAway = LiveServerGoAway.builder().build();
+    LiveServerMessage message = LiveServerMessage.builder().goAway(goAway).build();
+
+    TestObserver<LlmResponse> subscriber =
+        GeminiLlmConnection.convertToServerResponse(message).test();
+
+    subscriber.assertComplete().assertValueCount(1).assertNoErrors();
+    assertThat(subscriber.values().get(0).liveGoAway()).hasValue(goAway);
+    assertThat(subscriber.values().get(0).errorCode()).isEmpty();
+    assertThat(GeminiLlmConnection.diagnosticMessageTypes(message)).containsExactly("go_away");
+  }
+
+  @Test
+  public void close_unwrapsSafeRecoveryFailureFromFutureWrappers() {
+    CompletableFuture<GeminiLiveTransport> opening = new CompletableFuture<>();
+    GeminiLlmConnection connection = new GeminiLlmConnection(opening);
+    TestSubscriber<LlmResponse> subscriber = connection.receive().test();
+
+    connection.close(
+        new ExecutionException(
+            new CompletionException(
+                new IllegalStateException(ResumableLiveTransport.DELIVERY_UNKNOWN))));
+
+    subscriber.assertError(
+        error ->
+            error instanceof IllegalStateException
+                && error.getMessage().equals(ResumableLiveTransport.DELIVERY_UNKNOWN)
+                && error.getCause() == null);
+  }
+
+  @Test
+  public void close_beforeTransportConnectsClosesLateTransport() throws Exception {
+    CompletableFuture<GeminiLiveTransport> opening = new CompletableFuture<>();
+    GeminiLlmConnection connection = new GeminiLlmConnection(opening);
+    connection.close();
+    FakeTransport transport = new FakeTransport(false);
+
+    opening.complete(transport);
+
+    // Join the asynchronous setup callback through a send; a closed connection never sends data.
+    connection.sendHistory(List.of()).onErrorComplete().blockingAwait();
+    assertThat(transport.closeCount.get()).isEqualTo(1);
   }
 
   @Test

@@ -27,9 +27,11 @@ import com.google.genai.types.Content;
 import com.google.genai.types.FinishReason;
 import com.google.genai.types.FunctionCall;
 import com.google.genai.types.GenerateContentResponseUsageMetadata;
+import com.google.genai.types.LiveServerGoAway;
 import com.google.genai.types.LiveServerSessionResumptionUpdate;
 import com.google.genai.types.Part;
 import com.google.genai.types.Transcription;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -393,6 +395,17 @@ public final class EventTest {
     assertThat(Event.fromJson(event.toJson()).cacheMetadata()).hasValue(cacheMetadata);
     assertThat(event).isNotEqualTo(EVENT);
     assertThat(event.hashCode()).isNotEqualTo(EVENT.hashCode());
+  }
+
+  @Test
+  public void event_goAwaySurvivesJsonAndCopy() {
+    LiveServerGoAway goAway = LiveServerGoAway.builder().timeLeft(Duration.ofSeconds(10)).build();
+    Event event = EVENT.toBuilder().liveGoAway(goAway).build();
+
+    assertThat(event.liveGoAway()).hasValue(goAway);
+    assertThat(event.toBuilder().build()).isEqualTo(event);
+    assertThat(Event.fromJson(event.toJson())).isEqualTo(event);
+    assertThat(event).isNotEqualTo(EVENT);
   }
 
   @Test

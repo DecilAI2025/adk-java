@@ -29,9 +29,11 @@ import com.google.genai.types.FinishReason;
 import com.google.genai.types.FunctionCall;
 import com.google.genai.types.GenerateContentResponse;
 import com.google.genai.types.GenerateContentResponseUsageMetadata;
+import com.google.genai.types.LiveServerGoAway;
 import com.google.genai.types.LiveServerSessionResumptionUpdate;
 import com.google.genai.types.Part;
 import com.google.genai.types.Transcription;
+import java.time.Duration;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -232,6 +234,16 @@ public final class LlmResponseTest {
         LlmResponse.fromJsonString(originalResponse.toJson(), LlmResponse.class);
     assertThat(deserializedResponse).isEqualTo(originalResponse);
     assertThat(deserializedResponse.liveSessionResumptionUpdate()).hasValue(update);
+  }
+
+  @Test
+  public void goAwaySurvivesJsonAndCopy() {
+    LiveServerGoAway goAway = LiveServerGoAway.builder().timeLeft(Duration.ofSeconds(10)).build();
+    LlmResponse response = LlmResponse.builder().liveGoAway(goAway).build();
+
+    assertThat(response.toBuilder().build().liveGoAway()).hasValue(goAway);
+    assertThat(LlmResponse.fromJsonString(response.toJson(), LlmResponse.class).liveGoAway())
+        .hasValue(goAway);
   }
 
   @Test

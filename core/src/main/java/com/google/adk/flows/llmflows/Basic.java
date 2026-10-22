@@ -55,9 +55,14 @@ public final class Basic implements RequestProcessor {
         .ifPresent(liveConnectConfigBuilder::inputAudioTranscription);
     Optional.ofNullable(context.runConfig().sessionResumption())
         .ifPresent(liveConnectConfigBuilder::sessionResumption);
+    Optional.ofNullable(context.runConfig().contextWindowCompression())
+        .ifPresent(liveConnectConfigBuilder::contextWindowCompression);
 
     LlmRequest.Builder builder =
         request.toBuilder()
+            .liveResumptionReplayMaxMessages(context.runConfig().liveResumptionReplayMaxMessages())
+            .liveResumptionReplayMaxBytes(context.runConfig().liveResumptionReplayMaxBytes())
+            .liveRecoveryObserver(context.runConfig().liveRecoveryObserver())
             .model(modelName)
             .config(
                 agent

@@ -16,17 +16,20 @@
 
 package com.google.adk.agents;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.google.auto.value.AutoValue;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import com.google.genai.types.AudioTranscriptionConfig;
 import com.google.genai.types.AvatarConfig;
+import com.google.genai.types.ContextWindowCompressionConfig;
 import com.google.genai.types.Modality;
 import com.google.genai.types.SessionResumptionConfig;
 import com.google.genai.types.SpeechConfig;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Consumer;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,7 +37,26 @@ import org.slf4j.LoggerFactory;
 /** Configuration to modify an agent's LLM's underlying behavior. */
 @AutoValue
 public abstract class RunConfig {
+  public static final int DEFAULT_LIVE_RESUMPTION_REPLAY_MAX_MESSAGES = 4096;
+  public static final long DEFAULT_LIVE_RESUMPTION_REPLAY_MAX_BYTES = 8388608L;
   private static final Logger logger = LoggerFactory.getLogger(RunConfig.class);
+
+  /**
+   * Safe, process-local diagnostic snapshot; never contains provider content or resume handles.
+   * Counts are cumulative for one logical Live transport. GoAway reports the old connection;
+   * completion reports the new connection and includes only successfully completed replay.
+   */
+  public record LiveRecoveryEvent(
+      Phase phase,
+      long upstreamConnectionGeneration,
+      long acceptedCheckpointCount,
+      long replayedMessageCount,
+      long replayedByteCount) {
+    public enum Phase {
+      GO_AWAY_RECEIVED,
+      ROTATION_COMPLETED
+    }
+  }
 
   /** Streaming mode for the runner. Required for BaseAgent.runLive() to work. */
   public enum StreamingMode {
@@ -87,6 +109,17 @@ public abstract class RunConfig {
 
   public abstract @Nullable SessionResumptionConfig sessionResumption();
 
+  /** Provider-owned Live context compression; null keeps the provider feature disabled. */
+  public abstract @Nullable ContextWindowCompressionConfig contextWindowCompression();
+
+  public abstract int liveResumptionReplayMaxMessages();
+
+  public abstract long liveResumptionReplayMaxBytes();
+
+  /** Optional internal diagnostic sink; its failure cannot affect Live recovery. */
+  @JsonIgnore
+  public abstract @Nullable Consumer<LiveRecoveryEvent> liveRecoveryObserver();
+
   public abstract int maxLlmCalls();
 
   public abstract boolean autoCreateSession();
@@ -131,6 +164,8 @@ public abstract class RunConfig {
         .streamingMode(StreamingMode.NONE)
         .toolExecutionMode(ToolExecutionMode.NONE)
         .maxLlmCalls(500)
+        .liveResumptionReplayMaxMessages(DEFAULT_LIVE_RESUMPTION_REPLAY_MAX_MESSAGES)
+        .liveResumptionReplayMaxBytes(DEFAULT_LIVE_RESUMPTION_REPLAY_MAX_BYTES)
         .autoCreateSession(false)
         .customMetadata(ImmutableMap.of());
   }
@@ -148,6 +183,10 @@ public abstract class RunConfig {
         .outputAudioTranscription(runConfig.outputAudioTranscription())
         .inputAudioTranscription(runConfig.inputAudioTranscription())
         .sessionResumption(runConfig.sessionResumption())
+        .contextWindowCompression(runConfig.contextWindowCompression())
+        .liveResumptionReplayMaxMessages(runConfig.liveResumptionReplayMaxMessages())
+        .liveResumptionReplayMaxBytes(runConfig.liveResumptionReplayMaxBytes())
+        .liveRecoveryObserver(runConfig.liveRecoveryObserver())
         .autoCreateSession(runConfig.autoCreateSession())
         .groupFunctionResponsesInHistoryOverride(
             runConfig.groupFunctionResponsesInHistoryOverride())
@@ -231,6 +270,19 @@ public abstract class RunConfig {
     @CanIgnoreReturnValue
     public abstract Builder sessionResumption(@Nullable SessionResumptionConfig sessionResumption);
 
+    @CanIgnoreReturnValue
+    public abstract Builder contextWindowCompression(
+        @Nullable ContextWindowCompressionConfig contextWindowCompression);
+
+    @CanIgnoreReturnValue
+    public abstract Builder liveResumptionReplayMaxMessages(int maxMessages);
+
+    @CanIgnoreReturnValue
+    public abstract Builder liveResumptionReplayMaxBytes(long maxBytes);
+
+    @CanIgnoreReturnValue
+    public abstract Builder liveRecoveryObserver(@Nullable Consumer<LiveRecoveryEvent> observer);
+
     @Deprecated
     @CanIgnoreReturnValue
     public final Builder setMaxLlmCalls(int maxLlmCalls) {
@@ -290,6 +342,10 @@ public abstract class RunConfig {
 
     public RunConfig build() {
       RunConfig runConfig = autoBuild();
+      if (runConfig.liveResumptionReplayMaxMessages() <= 0
+          || runConfig.liveResumptionReplayMaxBytes() <= 0) {
+        throw new IllegalArgumentException("Live resumption replay limits must be positive.");
+      }
       if (runConfig.maxLlmCalls() == Integer.MAX_VALUE) {
         throw new IllegalArgumentException("maxLlmCalls should be less than Integer.MAX_VALUE.");
       }

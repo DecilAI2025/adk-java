@@ -21,6 +21,10 @@ import static com.google.adk.testing.TestUtils.createTestAgent;
 import static com.google.adk.testing.TestUtils.createTestLlm;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.google.adk.agents.BaseAgent;
 import com.google.adk.agents.InvocationContext;
@@ -31,21 +35,33 @@ import com.google.adk.flows.llmflows.RequestProcessor.RequestProcessingResult;
 import com.google.adk.models.LlmRequest;
 import com.google.adk.models.LlmResponse;
 import com.google.adk.testing.TestLlm;
+import com.google.auth.oauth2.AccessToken;
+import com.google.auth.oauth2.GoogleCredentials;
 import com.google.common.collect.ImmutableList;
+import com.google.genai.Client;
 import com.google.genai.types.AudioTranscriptionConfig;
 import com.google.genai.types.AvatarConfig;
+import com.google.genai.types.ClientOptions;
+import com.google.genai.types.ContextWindowCompressionConfig;
 import com.google.genai.types.CustomizedAvatar;
 import com.google.genai.types.GenerateContentConfig;
+import com.google.genai.types.LiveConnectConfig;
 import com.google.genai.types.Modality;
 import com.google.genai.types.Schema;
 import com.google.genai.types.SessionResumptionConfig;
+import com.google.genai.types.SlidingWindow;
 import com.google.genai.types.SpeechConfig;
 import com.google.genai.types.VoiceConfig;
 import io.reactivex.rxjava3.core.Flowable;
+import java.util.Date;
+import okhttp3.OkHttpClient;
+import okhttp3.WebSocket;
+import okhttp3.WebSocketListener;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentCaptor;
 
 @RunWith(JUnit4.class)
 public final class BasicTest {
@@ -282,6 +298,95 @@ public final class BasicTest {
     assertThat(updatedRequest.liveConnectConfig()).isNotNull();
     assertThat(updatedRequest.liveConnectConfig().sessionResumption()).hasValue(sessionResumption);
     assertThat(result.events()).isEmpty();
+  }
+
+  @Test
+  public void processRequest_propagatesProviderDefaultCompressionIntoSerializedSetup() {
+    java.util.function.Consumer<RunConfig.LiveRecoveryEvent> observer = event -> {};
+    ContextWindowCompressionConfig compression =
+        ContextWindowCompressionConfig.builder()
+            .slidingWindow(SlidingWindow.builder().build())
+            .build();
+    RunConfig runConfig =
+        RunConfig.builder()
+            .contextWindowCompression(compression)
+            .liveResumptionReplayMaxMessages(17)
+            .liveResumptionReplayMaxBytes(1024L)
+            .liveRecoveryObserver(observer)
+            .build();
+    LlmAgent agent = LlmAgent.builder().name("agentWithConfig").model(testLlm).build();
+    InvocationContext context = createInvocationContext(agent, runConfig);
+
+    LlmRequest updatedRequest =
+        basicProcessor.processRequest(context, initialRequest).blockingGet().updatedRequest();
+
+    assertThat(updatedRequest.liveConnectConfig().contextWindowCompression()).hasValue(compression);
+    assertThat(updatedRequest.liveResumptionReplayMaxMessages()).isEqualTo(17);
+    assertThat(updatedRequest.liveResumptionReplayMaxBytes()).isEqualTo(1024L);
+    assertThat(updatedRequest.liveRecoveryObserver()).isSameInstanceAs(observer);
+    assertThat(updatedRequest.liveConnectConfig().toJson())
+        .contains("\"contextWindowCompression\":{\"slidingWindow\":{}}");
+    assertThat(captureSdkSetup(updatedRequest.liveConnectConfig(), false))
+        .contains("\"contextWindowCompression\":{\"slidingWindow\":{}}");
+    assertThat(captureSdkSetup(updatedRequest.liveConnectConfig(), true))
+        .contains("\"contextWindowCompression\":{\"slidingWindow\":{}}");
+  }
+
+  @Test
+  public void processRequest_serializedSdkSetupRetainsExplicitCompressionOverrides() {
+    ContextWindowCompressionConfig compression =
+        ContextWindowCompressionConfig.builder()
+            .triggerTokens(100000L)
+            .slidingWindow(SlidingWindow.builder().targetTokens(80000L).build())
+            .build();
+    RunConfig runConfig = RunConfig.builder().contextWindowCompression(compression).build();
+    LlmAgent agent = LlmAgent.builder().name("agentWithConfig").model(testLlm).build();
+    LlmRequest updatedRequest =
+        basicProcessor
+            .processRequest(createInvocationContext(agent, runConfig), initialRequest)
+            .blockingGet()
+            .updatedRequest();
+
+    String setup = captureSdkSetup(updatedRequest.liveConnectConfig(), true);
+
+    assertThat(setup).contains("\"triggerTokens\":100000");
+    assertThat(setup).contains("\"targetTokens\":80000");
+  }
+
+  /** Drives the real SDK setup serializer; only its socket effect is mocked. */
+  private static String captureSdkSetup(LiveConnectConfig config, boolean vertexAi) {
+    OkHttpClient httpClient = mock(OkHttpClient.class);
+    OkHttpClient.Builder httpBuilder = mock(OkHttpClient.Builder.class);
+    WebSocket socket = mock(WebSocket.class);
+    when(httpClient.newBuilder()).thenReturn(httpBuilder);
+    when(httpBuilder.build()).thenReturn(httpClient);
+    when(httpClient.newWebSocket(any(), any()))
+        .thenAnswer(
+            invocation -> {
+              WebSocketListener listener = invocation.getArgument(1);
+              listener.onOpen(socket, null);
+              listener.onMessage(socket, "{\"setupComplete\":{}}");
+              return socket;
+            });
+    Client.Builder clientBuilder =
+        Client.builder()
+            .vertexAI(vertexAi)
+            .clientOptions(ClientOptions.builder().customHttpClient(httpClient).build());
+    if (vertexAi) {
+      GoogleCredentials credentials = mock(GoogleCredentials.class);
+      when(credentials.getAccessToken())
+          .thenReturn(new AccessToken("synthetic-test-token", new Date(Long.MAX_VALUE)));
+      clientBuilder.project("synthetic-project").location("us-central1").credentials(credentials);
+    } else {
+      clientBuilder.apiKey("synthetic-test-key");
+    }
+    Client client = clientBuilder.build();
+
+    client.async.live.connect("gemini-2.5-flash-live", config).join();
+
+    ArgumentCaptor<String> setup = ArgumentCaptor.forClass(String.class);
+    verify(socket).send(setup.capture());
+    return setup.getValue();
   }
 
   @Test

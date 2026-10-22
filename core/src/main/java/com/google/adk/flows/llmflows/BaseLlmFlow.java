@@ -726,6 +726,11 @@ public abstract class BaseLlmFlow implements BaseFlow {
                       () ->
                           receiveFlow.takeWhile(
                               event -> !event.actions().endInvocation().orElse(false)))
+                  .doOnCancel(
+                      () -> {
+                        sendTask.dispose();
+                        connection.close();
+                      })
                   .compose(Tracing.withContext(spanContext));
             }));
   }
@@ -754,7 +759,8 @@ public abstract class BaseLlmFlow implements BaseFlow {
         && updatedResponse.inputTranscription().isEmpty()
         && updatedResponse.outputTranscription().isEmpty()
         && updatedResponse.groundingMetadata().isEmpty()
-        && updatedResponse.liveSessionResumptionUpdate().isEmpty()) {
+        && updatedResponse.liveSessionResumptionUpdate().isEmpty()
+        && updatedResponse.liveGoAway().isEmpty()) {
       return processorEvents;
     }
 
@@ -890,6 +896,7 @@ public abstract class BaseLlmFlow implements BaseFlow {
             .inputTranscription(llmResponse.inputTranscription().orElse(null))
             .outputTranscription(llmResponse.outputTranscription().orElse(null))
             .liveSessionResumptionUpdate(llmResponse.liveSessionResumptionUpdate().orElse(null))
+            .liveGoAway(llmResponse.liveGoAway().orElse(null))
             .cacheMetadata(llmResponse.cacheMetadata().orElse(null));
 
     Event event = eventBuilder.build();

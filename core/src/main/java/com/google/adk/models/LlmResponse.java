@@ -31,6 +31,7 @@ import com.google.genai.types.GenerateContentResponse;
 import com.google.genai.types.GenerateContentResponsePromptFeedback;
 import com.google.genai.types.GenerateContentResponseUsageMetadata;
 import com.google.genai.types.GroundingMetadata;
+import com.google.genai.types.LiveServerGoAway;
 import com.google.genai.types.LiveServerSessionResumptionUpdate;
 import com.google.genai.types.Transcription;
 import java.util.List;
@@ -135,6 +136,10 @@ public abstract class LlmResponse extends JsonBaseModel {
   @JsonProperty("liveSessionResumptionUpdate")
   public abstract Optional<LiveServerSessionResumptionUpdate> liveSessionResumptionUpdate();
 
+  /** Provider notification that only the upstream Live connection is nearing its end. */
+  @JsonProperty("liveGoAway")
+  public abstract Optional<LiveServerGoAway> liveGoAway();
+
   /** Context cache state for this response; set only when context caching is enabled. */
   @JsonProperty("cacheMetadata")
   public abstract Optional<CacheMetadata> cacheMetadata();
@@ -197,6 +202,9 @@ public abstract class LlmResponse extends JsonBaseModel {
     @JsonProperty("liveSessionResumptionUpdate")
     public abstract Builder liveSessionResumptionUpdate(
         @Nullable LiveServerSessionResumptionUpdate liveSessionResumptionUpdate);
+
+    @JsonProperty("liveGoAway")
+    public abstract Builder liveGoAway(@Nullable LiveServerGoAway liveGoAway);
 
     @JsonProperty("cacheMetadata")
     public abstract Builder cacheMetadata(@Nullable CacheMetadata cacheMetadata);

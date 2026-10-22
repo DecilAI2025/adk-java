@@ -44,7 +44,9 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -179,6 +181,13 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
                     handled.set(true);
                   });
           message
+              .goAway()
+              .ifPresent(
+                  goAway -> {
+                    emitter.onNext(LlmResponse.builder().liveGoAway(goAway).build());
+                    handled.set(true);
+                  });
+          message
               .setupComplete()
               .ifPresent(
                   setupComplete -> {
@@ -228,6 +237,9 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
     if (message.sessionResumptionUpdate().isPresent()) {
       types.add("session_resumption_update");
     }
+    if (message.goAway().isPresent()) {
+      types.add("go_away");
+    }
     if (message.setupComplete().isPresent()) {
       types.add("setup_complete");
     }
@@ -268,9 +280,7 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
   private void handleConnectionError(Throwable throwable) {
     if (closed.compareAndSet(false, true)) {
       logger.error("WebSocket connection failed", throwable);
-      Throwable cause =
-          (throwable instanceof CompletionException) ? throwable.getCause() : throwable;
-      responseProcessor.onError(cause);
+      responseProcessor.onError(unwrapFutureError(throwable));
     }
   }
 
@@ -278,7 +288,7 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
   private void handleReceiveError(Throwable throwable) {
     if (closed.compareAndSet(false, true)) {
       logger.error("Error during WebSocket receive operation", throwable);
-      responseProcessor.onError(throwable);
+      responseProcessor.onError(unwrapFutureError(throwable));
       transportFuture
           .thenAccept(this::closeTransportIgnoringErrors)
           .exceptionally(unusedError -> null);
@@ -352,9 +362,7 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
 
   @Override
   public Completable sendRealtime(Blob blob) {
-    return Completable.fromFuture(
-        transportFuture.thenCompose(
-            transport -> transport.sendRealtimeInput(realtimeInputParameters(blob))));
+    return sendOnTransport(transport -> transport.sendRealtimeInput(realtimeInputParameters(blob)));
   }
 
   private LiveSendRealtimeInputParameters realtimeInputParameters(Blob blob) {
@@ -372,23 +380,30 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
   }
 
   private Completable sendRealtimeText(String text) {
-    return Completable.fromFuture(
-        transportFuture.thenCompose(
-            transport ->
-                transport.sendRealtimeInput(
-                    LiveSendRealtimeInputParameters.builder().text(text).build())));
+    return sendOnTransport(
+        transport ->
+            transport.sendRealtimeInput(
+                LiveSendRealtimeInputParameters.builder().text(text).build()));
   }
 
   /** Helper to send client content parameters. */
   private Completable sendClientContentInternal(LiveSendClientContentParameters parameters) {
-    return Completable.fromFuture(
-        transportFuture.thenCompose(transport -> transport.sendClientContent(parameters)));
+    return sendOnTransport(transport -> transport.sendClientContent(parameters));
   }
 
   /** Helper to send tool response parameters. */
   private Completable sendToolResponseInternal(LiveSendToolResponseParameters parameters) {
+    return sendOnTransport(transport -> transport.sendToolResponse(parameters));
+  }
+
+  private Completable sendOnTransport(Function<GeminiLiveTransport, CompletableFuture<Void>> send) {
     return Completable.fromFuture(
-        transportFuture.thenCompose(transport -> transport.sendToolResponse(parameters)));
+        transportFuture.thenCompose(
+            transport ->
+                closed.get()
+                    ? CompletableFuture.failedFuture(
+                        new IllegalStateException(ResumableLiveTransport.DELIVERY_UNKNOWN))
+                    : send.apply(transport)));
   }
 
   @Override
@@ -404,7 +419,15 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
   @Override
   public void close(Throwable throwable) {
     Objects.requireNonNull(throwable, "throwable cannot be null for close");
-    closeInternal(throwable);
+    closeInternal(unwrapFutureError(throwable));
+  }
+
+  private static Throwable unwrapFutureError(Throwable error) {
+    while ((error instanceof CompletionException || error instanceof ExecutionException)
+        && error.getCause() != null) {
+      error = error.getCause();
+    }
+    return error;
   }
 
   /** Internal method to handle closing logic and signal completion/error. */
@@ -422,9 +445,10 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
         transportFuture
             .thenAccept(this::closeTransportIgnoringErrors)
             .exceptionally(unusedError -> null);
-      } else {
-        transportFuture.cancel(false);
       }
+
+      // Keep the setup continuation alive: setupReceiver closes a transport that arrives after
+      // cancellation. Cancelling this derived future would discard that cleanup callback.
 
       disposables.dispose();
     }

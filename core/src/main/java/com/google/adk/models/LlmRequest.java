@@ -27,6 +27,8 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.google.adk.JsonBaseModel;
 import com.google.adk.agents.ContextCacheConfig;
 import com.google.adk.agents.Role;
+import com.google.adk.agents.RunConfig;
+import com.google.adk.agents.RunConfig.LiveRecoveryEvent;
 import com.google.adk.tools.BaseTool;
 import com.google.auto.value.AutoValue;
 import com.google.common.collect.ImmutableList;
@@ -40,6 +42,7 @@ import com.google.genai.types.Schema;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
 
@@ -81,6 +84,18 @@ public abstract class LlmRequest extends JsonBaseModel {
    */
   @JsonProperty("liveConnectConfig")
   public abstract LiveConnectConfig liveConnectConfig();
+
+  /** ADK-local replay retention bound, excluded from provider request JSON. */
+  @JsonIgnore
+  public abstract int liveResumptionReplayMaxMessages();
+
+  /** ADK-local replay retention bound, excluded from provider request JSON. */
+  @JsonIgnore
+  public abstract long liveResumptionReplayMaxBytes();
+
+  /** ADK-local observation only; never part of provider setup or serialized requests. */
+  @JsonIgnore
+  public abstract @Nullable Consumer<LiveRecoveryEvent> liveRecoveryObserver();
 
   /**
    * Returns a map of tools available to the LLM.
@@ -130,6 +145,8 @@ public abstract class LlmRequest extends JsonBaseModel {
     return new AutoValue_LlmRequest.Builder()
         .tools(ImmutableMap.of())
         .contents(ImmutableList.of())
+        .liveResumptionReplayMaxMessages(RunConfig.DEFAULT_LIVE_RESUMPTION_REPLAY_MAX_MESSAGES)
+        .liveResumptionReplayMaxBytes(RunConfig.DEFAULT_LIVE_RESUMPTION_REPLAY_MAX_BYTES)
         .liveConnectConfig(LiveConnectConfig.builder().build());
   }
 
@@ -161,6 +178,12 @@ public abstract class LlmRequest extends JsonBaseModel {
     @CanIgnoreReturnValue
     @JsonProperty("liveConnectConfig")
     public abstract Builder liveConnectConfig(LiveConnectConfig liveConnectConfig);
+
+    public abstract Builder liveResumptionReplayMaxMessages(int maxMessages);
+
+    public abstract Builder liveResumptionReplayMaxBytes(long maxBytes);
+
+    public abstract Builder liveRecoveryObserver(@Nullable Consumer<LiveRecoveryEvent> observer);
 
     abstract LiveConnectConfig liveConnectConfig();
 
@@ -257,6 +280,15 @@ public abstract class LlmRequest extends JsonBaseModel {
           config.toBuilder().responseSchema(schema).responseMimeType("application/json").build());
     }
 
-    public abstract LlmRequest build();
+    abstract LlmRequest autoBuild();
+
+    public LlmRequest build() {
+      LlmRequest request = autoBuild();
+      checkArgument(
+          request.liveResumptionReplayMaxMessages() > 0
+              && request.liveResumptionReplayMaxBytes() > 0,
+          "Live resumption replay limits must be positive.");
+      return request;
+    }
   }
 }

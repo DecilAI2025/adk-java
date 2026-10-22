@@ -341,8 +341,20 @@ public class Gemini extends BaseLlm {
     logger.debug("Connecting to model {}", effectiveModelName);
     logger.trace("Live connection config prepared.");
 
-    return new GeminiLlmConnection(
-        connectLiveTransport(effectiveModelName, liveConnectConfig), effectiveModelName);
+    CompletableFuture<GeminiLiveTransport> transport =
+        liveConnectConfig
+                .sessionResumption()
+                .flatMap(com.google.genai.types.SessionResumptionConfig::transparent)
+                .orElse(false)
+            ? CompletableFuture.completedFuture(
+                new ResumableLiveTransport(
+                    config -> connectLiveTransport(effectiveModelName, config),
+                    liveConnectConfig,
+                    llmRequest.liveResumptionReplayMaxMessages(),
+                    llmRequest.liveResumptionReplayMaxBytes(),
+                    llmRequest.liveRecoveryObserver()))
+            : connectLiveTransport(effectiveModelName, liveConnectConfig);
+    return new GeminiLlmConnection(transport, effectiveModelName);
   }
 
   /**
