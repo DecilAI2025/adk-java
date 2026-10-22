@@ -297,6 +297,21 @@ public final class BasicTest {
     LlmRequest updatedRequest = result.updatedRequest();
     assertThat(updatedRequest.liveConnectConfig()).isNotNull();
     assertThat(updatedRequest.liveConnectConfig().sessionResumption()).hasValue(sessionResumption);
+    String vertexSetup = captureSdkSetup(updatedRequest.liveConnectConfig(), true);
+    assertThat(vertexSetup).contains("\"sessionResumption\":{");
+    assertThat(vertexSetup).contains("\"handle\":\"resume-handle\"");
+    assertThat(vertexSetup).contains("\"transparent\":true");
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> captureSdkSetup(updatedRequest.liveConnectConfig(), false));
+    LiveConnectConfig developerConfig =
+        updatedRequest.liveConnectConfig().toBuilder()
+            .sessionResumption(SessionResumptionConfig.builder().handle("resume-handle").build())
+            .build();
+    String developerSetup = captureSdkSetup(developerConfig, false);
+    assertThat(developerSetup).contains("\"sessionResumption\":{");
+    assertThat(developerSetup).contains("\"handle\":\"resume-handle\"");
+    assertThat(developerSetup).doesNotContain("\"transparent\"");
     assertThat(result.events()).isEmpty();
   }
 

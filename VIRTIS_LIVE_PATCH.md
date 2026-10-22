@@ -5,7 +5,9 @@ The exact upstream ADK Java 1.12.0 baseline is tag `v1.12.0`, commit
 the consumed fork commit, is `a671d98eb7731d6e73accc9ddcaf47f1cedad399`.
 The former `923d602e...` baseline attribution was incorrect. This inventory
 covers every fork change, including production, tests and documentation,
-and then distinguishes the frontend-closure Revision 8 working-tree additions.
+and then distinguishes the frontend-closure packet additions introduced in
+Revision 8. Those additions, including the later optional recovery observer,
+were checkpointed at `04abfdba8e2fa4a2e7e9f0faf2dc886a839f1a89`.
 `git diff --stat v1.12.0..a671d98eb7731d6e73accc9ddcaf47f1cedad399`
 reports exactly 19 files, 618 insertions and 11 deletions. Inspection of that
 complete diff found no other pre-Revision-8 non-Live production delta.
@@ -48,6 +50,10 @@ transparent session-resumption config. `Gemini` composes one private
 serialized sender. Nontransparent or absent resumption uses the original
 transport directly. `LiveRequestQueue` remains the input queue; there is no
 new business queue, durable replay ledger or resume authority.
+The pinned SDK admits `transparent` only in Vertex mode and rejects it in
+Gemini Developer API mode; ordinary nontransparent handle setup remains
+supported there. This packet's automatic rotation uses the selected Vertex
+binding, not a transparent-resumption claim for both provider modes.
 
 The helper records exact typed client-content, realtime text/audio/video/media
 and tool-response parameters before SDK send. Setup is excluded; indices start
@@ -132,6 +138,17 @@ errors, are caught and ignored without logging their content; observation is
 never a condition for recovery, replay, fencing or session continuity. Gemini
 alone owns its guarded test-only installation and browser frame mapping.
 
+`ROTATION_COMPLETED` proves the transport setup and local ordered replay
+finished, not that the provider restored earlier conversation context or
+consumed the replay. The SDK setup-complete type has no explicit resumed-state
+acknowledgement, and this adapter does not compare provider session IDs.
+Behavioral context continuity therefore needs separate provider proof. The
+observer has no timestamps or per-stage durations: elapsed time until the next
+persisted transcription cannot distinguish handoff/connect/replay latency from
+provider response, speech/VAD, caller input timing or persistence latency.
+There is no deliberate sleep/backoff or wait for `GoAway.timeLeft`; the helper
+immediately begins its bounded single handoff and waits the existing futures.
+
 ## Verification
 
 Focused and complete local gates are:
@@ -152,12 +169,23 @@ Observer tests also prove end-to-end configuration propagation, no
 nontransparent notifications, checkpoint deduplication, cumulative counters
 over multiple generations, exact replay bytes for every operation kind,
 phase ordering, failure/cancellation suppression and sink-failure isolation.
-On 2026-10-21 the final expanded focused gate, including the recovery observer,
+The initial-resumption test also asserts the synthetic handle and transparent
+flag in Vertex's actual serialized SDK setup, Developer API rejection of
+transparent mode, and ordinary Developer API handle serialization. The
+replacement test asserts that the newest accepted checkpoint supplies the
+replacement config.
+On 2026-10-21 the original expanded focused gate, including the recovery observer,
 passed 254 primary tests with zero failures/errors/skips in 15.534 seconds.
 The external-provider-disabled full gate passed all 19 reactor modules in
 1:41; core's primary suite ran 2,394 tests with zero failures/errors and 24
 skips. Configured additional
 Surefire executions also passed. No pre-existing test failure was encountered.
+The 2026-10-23 acceptance refresh, including the serialized resumption-handle
+assertions, again passed 254 primary focused tests with no failures/errors/skips
+in 17.200 seconds and all 19 provider-disabled reactor modules in 1:44; core
+again ran 2,394 primary tests with no failures/errors and 24 skips. Configured
+additional Surefire executions passed. Production source bytes were unchanged,
+so this refresh supplements rather than invalidates the original full gate.
 The execution handoff records the exact packaged artifact/source hashes.
 Actual provider-issued GoAway, remembered-nonce continuity and observed
 compression firing require separate authorized live proof; local socket
@@ -169,8 +197,9 @@ commit and immutable JitPack coordinates
 handoff records that commit's full SHA and resolution proof after Git creates
 the commit object. A branch name, moving reference, tag, or local Maven
 artifact is not an acceptable production dependency or rollback/forward
-mechanism. A checksum-addressed local candidate is development evidence only;
-this lane does not commit, publish or change the production dependency pin.
+mechanism. A checksum-addressed local candidate is development evidence only.
+The separately authorized fork checkpoint does not publish an artifact or
+change the production dependency pin.
 
 ## Patch inventory versus exact upstream base
 
@@ -272,6 +301,7 @@ delta, not only new files. `A` marks a new file in that respective comparison.
 
 Reproduce the baseline list with
 `git diff --name-status v1.12.0..a671d98eb7731d6e73accc9ddcaf47f1cedad399`;
-compare `git diff --name-status a671d98eb7731d6e73accc9ddcaf47f1cedad399`
-plus untracked additions for the R8 working-tree list. Generated `target/`
+compare `git diff --name-status a671d98eb7731d6e73accc9ddcaf47f1cedad399..HEAD`
+for the committed packet list, adding any explicitly identified working-tree
+changes during implementation. Generated `target/`
 artifacts and packet execution notes are not fork source deltas.
