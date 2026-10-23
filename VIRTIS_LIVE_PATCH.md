@@ -1,28 +1,41 @@
 # Virtis ADK Java fork maintainer inventory
 
 The exact upstream ADK Java 1.12.0 baseline is tag `v1.12.0`, commit
-`4f2178cce329aa2ce7ffb94e2be399f5dfd370c2`. Its direct Virtis descendant,
-the consumed fork commit, is `a671d98eb7731d6e73accc9ddcaf47f1cedad399`.
-The former `923d602e...` baseline attribution was incorrect. This inventory
-covers every fork change, including production, tests and documentation,
-and then distinguishes the frontend-closure packet additions introduced in
-Revision 8. Those additions, including the later optional recovery observer,
-were checkpointed at `04abfdba8e2fa4a2e7e9f0faf2dc886a839f1a89`.
-`git diff --stat v1.12.0..a671d98eb7731d6e73accc9ddcaf47f1cedad399`
-reports exactly 19 files, 618 insertions and 11 deletions. Inspection of that
-complete diff found no other pre-Revision-8 non-Live production delta.
+`4f2178cce329aa2ce7ffb94e2be399f5dfd370c2`. The accepted Virtis
+runtime/artifact commit is
+`baa5801ea110b54616977e5a24b4cb6f0761c5cf`. Earlier baseline and consumed-head
+attributions are superseded. This inventory covers every accepted fork change, including
+production, tests and documentation. A documentation-only successor may
+correct this file without changing the accepted runtime/artifact identity.
 
-The consumed fork's five behavior groups are:
+`git diff --stat v1.12.0..baa5801ea110b54616977e5a24b4cb6f0761c5cf`
+reports exactly 23 files, 2,605 insertions and 27 deletions. Inspection of that
+complete diff found no other production, test, build or dependency delta.
+The accepted immutable artifact coordinate and hashes are:
+
+- `com.github.DecilAI2025.adk-java:google-adk:baa5801ea110b54616977e5a24b4cb6f0761c5cf`;
+- POM SHA-256
+  `49cf6dc7cd882ec305002b4f2c3806f4176c90b32a03bac44a1ff79b7af5da58`;
+- JAR SHA-256
+  `309fdf5d546af5c9fd9a61eb153563f0da0356dbd659b755135428a0f68f72ea`.
+
+The accepted fork's behavior groups are:
 
 - explicit queued-content `turnComplete`, including `false` for incomplete
   hidden instructions;
 - `RunConfig.sessionResumption` propagation into `LiveConnectConfig`;
 - provider resumption updates carried through `LlmResponse`, `Event`, builders,
   copies, and contentless event conversion;
-- Gemini 3.1 Live realtime text/audio/video mapping while Gemini 2.5 retains
-  its media behavior and incomplete system instructions remain client content;
+- Gemini 3.1 Live realtime-text mapping plus resolved Live Gemini 3.x
+  split-media mapping: audio uses the SDK audio field and image/video uses the
+  SDK video field. Gemini 3.8 text and Gemini 2.5 text/media behavior remain on
+  their legacy client-content/media paths. The 2.5 path is compatibility only:
+  ADK does not select it, so it stays dormant unless an external caller
+  explicitly supplies a 2.5 model;
 - bounded Live diagnostics that contain only safe message-type presence, never
-  provider bodies or opaque resumption handles.
+  provider bodies or opaque resumption handles;
+- typed provider-default compression, typed GoAway, bounded transparent
+  rotation/replay and optional safe scalar recovery observation.
 
 GenerateContent and context-cache behavior comes from the upstream baseline,
 not a Virtis patch. In particular, context caching is not Live session
@@ -158,7 +171,7 @@ Focused and complete local gates are:
 env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY -u GOOGLE_API_KEY -u GEMINI_API_KEY ./mvnw test
 ```
 
-Revision 8 deterministic checks cover every outbound kind, exact SDK setup
+The accepted deterministic checks cover every outbound kind, exact SDK setup
 serialization for Gemini API and Vertex with synthetic socket/credentials,
 count/UTF-8-byte bounds, checkpoint validation/pruning, index reset, ordered
 replay, queued new input, duplicate GoAway, public failure recovery, ambiguity,
@@ -173,33 +186,23 @@ The initial-resumption test also asserts the synthetic handle and transparent
 flag in Vertex's actual serialized SDK setup, Developer API rejection of
 transparent mode, and ordinary Developer API handle serialization. The
 replacement test asserts that the newest accepted checkpoint supplies the
-replacement config.
-On 2026-10-21 the original expanded focused gate, including the recovery observer,
-passed 254 primary tests with zero failures/errors/skips in 15.534 seconds.
-The external-provider-disabled full gate passed all 19 reactor modules in
-1:41; core's primary suite ran 2,394 tests with zero failures/errors and 24
-skips. Configured additional
-Surefire executions also passed. No pre-existing test failure was encountered.
-The 2026-10-23 acceptance refresh, including the serialized resumption-handle
-assertions, again passed 254 primary focused tests with no failures/errors/skips
-in 17.200 seconds and all 19 provider-disabled reactor modules in 1:44; core
-again ran 2,394 primary tests with no failures/errors and 24 skips. Configured
-additional Surefire executions passed. Production source bytes were unchanged,
-so this refresh supplements rather than invalidates the original full gate.
-The execution handoff records the exact packaged artifact/source hashes.
+replacement config. On 2026-10-23 the accepted
+`baa5801ea110b54616977e5a24b4cb6f0761c5cf` focused gate passed 263 primary
+tests with zero failures/errors/skips; all configured additional Surefire
+executions also passed. The external-provider-disabled full gate passed all 19
+reactor modules in 1:40. No pre-existing test failure was encountered.
 Actual provider-issued GoAway, remembered-nonce continuity and observed
 compression firing require separate authorized live proof; local socket
 injection and accepted setup do not prove those observations.
 
-Production publication/consumption requires a separately authorized reviewed
-commit and immutable JitPack coordinates
-`com.github.DecilAI2025.adk-java:google-adk:<full-commit-sha>`. The publication
-handoff records that commit's full SHA and resolution proof after Git creates
-the commit object. A branch name, moving reference, tag, or local Maven
-artifact is not an acceptable production dependency or rollback/forward
-mechanism. A checksum-addressed local candidate is development evidence only.
-The separately authorized fork checkpoint does not publish an artifact or
-change the production dependency pin.
+The accepted JitPack POM and JAR for the full commit SHA were resolved into the
+isolated candidate Maven repository `.candidate-m2/adk-r64-baa5801e`. Both are
+regular, non-symlink files; their SHA-1 values matched JitPack's published
+sidecars, their SHA-256 values are recorded above, and standalone offline Maven
+resolution of the exact coordinate passed. This publication evidence does not
+by itself change any consuming repository's production dependency pin. A
+branch name, moving reference, tag or locally rebuilt artifact is not an
+acceptable rollback/forward coordinate.
 
 ## Patch inventory versus exact upstream base
 
@@ -208,7 +211,7 @@ change the production dependency pin.
 | Explicit queued-content turn completion | `agents/LiveRequest.java`, `agents/LiveRequestQueue.java`, `models/BaseLlmConnection.java`, `flows/llmflows/BaseLlmFlow.java`, `models/GeminiLlmConnection.java` | `LiveRequestQueueTest`; `RunnerTest.runLive_contentWithTurnCompleteFalsePropagatesToConnection`; `GeminiLlmConnectionTest` |
 | Live session-resumption configuration | `agents/RunConfig.java`, `flows/llmflows/Basic.java` | `RunConfigTest`; `BasicTest` |
 | Provider resumption updates | `models/GeminiLlmConnection.java`, `models/LlmResponse.java`, `events/Event.java`, `flows/llmflows/BaseLlmFlow.java` | `GeminiLlmConnectionTest`; `LlmResponseTest`; `EventTest`; `RunnerTest.runLive_contentlessSessionResumptionUpdatePropagatesToEvent` |
-| Gemini 3.1 Live input shapes | `models/Gemini.java`, `models/GeminiLlmConnection.java` | `GeminiLlmConnectionTest` model-specific text, audio, video, Gemini 2.5 media, and incomplete-system-content cases |
+| Gemini Live input shapes | `models/Gemini.java`, `models/GeminiLlmConnection.java` | `GeminiLlmConnectionTest` covers 3.1 realtime text, 3.8 client-content text, Live Gemini 3.x split audio/video, qualified resolved names, dormant 2.5 compatibility, unknown/non-Live fallback and incomplete system content |
 | Safe Live diagnostics | `models/GeminiLlmConnection.java`, `models/Gemini.java`, `flows/llmflows/BaseLlmFlow.java` | `GeminiLlmConnectionTest.diagnosticMessageTypes_reportsPresenceWithoutPayloadOrHandle`; absence of setup/event serialization in the complete fork diff |
 
 ## Upstream comparison and rebase decisions
@@ -253,6 +256,8 @@ Resolved Gemini 3.1 Live models send ordinary text through the realtime text
 field. Resolved Live Gemini 3.x models map audio to realtime audio and
 image/video to realtime video. Gemini 3.8 ordinary text and all Gemini 2.5
 realtime blobs retain their existing client-content/media-field behavior.
+The 2.5 handling is a dormant compatibility path, not a selector: ADK uses it
+only when its external caller explicitly resolves a 2.5 model name.
 System-role content stays on client-content transport so `turnComplete=false`
 remains expressible. The split-media predicate evaluates the resolved model
 basename and therefore accepts qualified resource names without classifying
@@ -272,40 +277,40 @@ session resumption.
 
 ## Exhaustive changed-file appendix
 
-Paths below are relative to this repository. `B` means changed between exact
-upstream `v1.12.0` and consumed fork `a671d98...`; `R8` means additionally
-changed/added by this packet. This union covers every fork production/test/doc
-delta, not only new files. `A` marks a new file in that respective comparison.
+Paths below are relative to this repository. `A` and `M` are the exact statuses
+between upstream `v1.12.0` and accepted runtime/artifact commit
+`baa5801ea110b54616977e5a24b4cb6f0761c5cf`. The table covers every accepted
+production, test and documentation delta, not only Live-specific filenames.
 
-| Path | B | R8 | Change / proof responsibility |
-| --- | --- | --- | --- |
-| `VIRTIS_LIVE_PATCH.md` | A | M | Complete maintainer inventory, provenance, verification, limitations and rebase decisions. |
-| `core/src/main/java/com/google/adk/agents/LiveRequest.java` | M | — | Optional explicit turnComplete plus JSON/builder. |
-| `core/src/main/java/com/google/adk/agents/LiveRequestQueue.java` | M | — | Explicit content completion overload; one input queue. |
-| `core/src/main/java/com/google/adk/agents/RunConfig.java` | M | M | Typed resumption, compression, replay defaults/positive validation/copies; optional internal observer and closed scalar event record. |
-| `core/src/main/java/com/google/adk/events/Event.java` | M | M | Typed resumption/GoAway, JSON, copies, equality and hash. |
-| `core/src/main/java/com/google/adk/flows/llmflows/BaseLlmFlow.java` | M | M | Completion flag, contentless lifecycle conversion, safe logging and cancellation. |
-| `core/src/main/java/com/google/adk/flows/llmflows/Basic.java` | M | M | Actual resumption/compression setup and local replay-bound/observer propagation. |
-| `core/src/main/java/com/google/adk/models/BaseLlmConnection.java` | M | — | Backward-compatible completion overload with legacy implementation fallback. |
-| `core/src/main/java/com/google/adk/models/Gemini.java` | M | M | Resolved model handed to connection, safe setup logging, transparent-only replay/optional observer composition. |
-| `core/src/main/java/com/google/adk/models/GeminiLlmConnection.java` | M | M | Model-specific media/text, completion, lifecycle conversion, safe diagnostics and late-open cleanup. |
-| `core/src/main/java/com/google/adk/models/LlmRequest.java` | — | M | Positive, nonserialized replay bounds, optional nonserialized observer, defaults/copy support. |
-| `core/src/main/java/com/google/adk/models/LlmResponse.java` | M | M | Typed resumption/GoAway response fields/builders. |
-| `core/src/main/java/com/google/adk/models/ResumableLiveTransport.java` | — | A | Single private checkpoint/window/handoff authority; safe failures and optional best-effort cumulative scalar observation. |
-| `core/src/test/java/com/google/adk/agents/LiveRequestQueueTest.java` | A | — | Turn-complete defaults/false/queue JSON compatibility. |
-| `core/src/test/java/com/google/adk/agents/RunConfigTest.java` | M | M | Typed setup/observer copies/defaults and replay bound rejection. |
-| `core/src/test/java/com/google/adk/events/EventTest.java` | M | M | Lifecycle JSON/copies/equality. |
-| `core/src/test/java/com/google/adk/flows/llmflows/BasicTest.java` | M | M | Setup/local observer propagation and actual SDK serializer for both provider modes. |
-| `core/src/test/java/com/google/adk/models/GeminiLlmConnectionTest.java` | M | M | Retained media/completion/resumption/safe diagnostics; GoAway and late close. |
-| `core/src/test/java/com/google/adk/models/LlmRequestTest.java` | — | M | Local bounds/observer defaults/copies/validation/JSON exclusion. |
-| `core/src/test/java/com/google/adk/models/LlmResponseTest.java` | M | M | Lifecycle serialization and copies. |
-| `core/src/test/java/com/google/adk/models/ResumableLiveTransportTest.java` | — | A | Transparent-only selection, exact replay, bounds, indices, ambiguity, cancellation, one sender, cumulative scalar observer semantics and sink-failure isolation. |
-| `core/src/test/java/com/google/adk/runner/RunnerTest.java` | M | M | Completion flag and contentless lifecycle through real flow; cancellation stops sender. |
-| `core/src/test/java/com/google/adk/testing/TestLlm.java` | M | — | Test connection records explicit completion flag, allowing the real-flow regression. |
+| Path | Status | Change / proof responsibility |
+| --- | --- | --- |
+| `VIRTIS_LIVE_PATCH.md` | A | Complete maintainer inventory, provenance, verification, limitations and rebase decisions. |
+| `core/src/main/java/com/google/adk/agents/LiveRequest.java` | M | Optional explicit turnComplete plus JSON/builder. |
+| `core/src/main/java/com/google/adk/agents/LiveRequestQueue.java` | M | Explicit content completion overload; one input queue. |
+| `core/src/main/java/com/google/adk/agents/RunConfig.java` | M | Typed resumption, compression, replay defaults/positive validation/copies; optional internal observer and closed scalar event record. |
+| `core/src/main/java/com/google/adk/events/Event.java` | M | Typed resumption/GoAway, JSON, copies, equality and hash. |
+| `core/src/main/java/com/google/adk/flows/llmflows/BaseLlmFlow.java` | M | Completion flag, contentless lifecycle conversion, safe logging and cancellation. |
+| `core/src/main/java/com/google/adk/flows/llmflows/Basic.java` | M | Actual resumption/compression setup and local replay-bound/observer propagation. |
+| `core/src/main/java/com/google/adk/models/BaseLlmConnection.java` | M | Backward-compatible completion overload with legacy implementation fallback. |
+| `core/src/main/java/com/google/adk/models/Gemini.java` | M | Resolved model handed to connection, safe setup logging, transparent-only replay/optional observer composition. |
+| `core/src/main/java/com/google/adk/models/GeminiLlmConnection.java` | M | Separate 3.1 text and Live Gemini 3.x split-media predicates, completion, lifecycle conversion, safe diagnostics and late-open cleanup. |
+| `core/src/main/java/com/google/adk/models/LlmRequest.java` | M | Positive, nonserialized replay bounds, optional nonserialized observer, defaults/copy support. |
+| `core/src/main/java/com/google/adk/models/LlmResponse.java` | M | Typed resumption/GoAway response fields/builders. |
+| `core/src/main/java/com/google/adk/models/ResumableLiveTransport.java` | A | Single private checkpoint/window/handoff authority; safe failures and optional best-effort cumulative scalar observation. |
+| `core/src/test/java/com/google/adk/agents/LiveRequestQueueTest.java` | A | Turn-complete defaults/false/queue JSON compatibility. |
+| `core/src/test/java/com/google/adk/agents/RunConfigTest.java` | M | Typed setup/observer copies/defaults and replay bound rejection. |
+| `core/src/test/java/com/google/adk/events/EventTest.java` | M | Lifecycle JSON/copies/equality. |
+| `core/src/test/java/com/google/adk/flows/llmflows/BasicTest.java` | M | Setup/local observer propagation and actual SDK serializer for both provider modes. |
+| `core/src/test/java/com/google/adk/models/GeminiLlmConnectionTest.java` | M | 3.1/3.8 text and media routing, qualified names, dormant 2.5 compatibility, fallbacks, completion, lifecycle and safe diagnostics. |
+| `core/src/test/java/com/google/adk/models/LlmRequestTest.java` | M | Local bounds/observer defaults/copies/validation/JSON exclusion. |
+| `core/src/test/java/com/google/adk/models/LlmResponseTest.java` | M | Lifecycle serialization and copies. |
+| `core/src/test/java/com/google/adk/models/ResumableLiveTransportTest.java` | A | Transparent-only selection, exact replay, bounds, indices, ambiguity, cancellation, one sender, cumulative scalar observer semantics and sink-failure isolation. |
+| `core/src/test/java/com/google/adk/runner/RunnerTest.java` | M | Completion flag and contentless lifecycle through real flow; cancellation stops sender. |
+| `core/src/test/java/com/google/adk/testing/TestLlm.java` | M | Test connection records explicit completion flag, allowing the real-flow regression. |
 
-Reproduce the baseline list with
-`git diff --name-status v1.12.0..a671d98eb7731d6e73accc9ddcaf47f1cedad399`;
-compare `git diff --name-status a671d98eb7731d6e73accc9ddcaf47f1cedad399..HEAD`
-for the committed packet list, adding any explicitly identified working-tree
-changes during implementation. Generated `target/`
-artifacts and packet execution notes are not fork source deltas.
+Reproduce the accepted list with
+`git diff --name-status v1.12.0..baa5801ea110b54616977e5a24b4cb6f0761c5cf`
+and the aggregate with
+`git diff --shortstat v1.12.0..baa5801ea110b54616977e5a24b4cb6f0761c5cf`.
+Generated `target/` artifacts, isolated candidate repositories and packet
+execution notes are not fork source deltas.
