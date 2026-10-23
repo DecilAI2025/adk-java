@@ -112,6 +112,23 @@ public final class GeminiLlmConnectionTest {
   }
 
   @Test
+  public void sendContent_withGemini38LiveText_keepsClientContentPath() {
+    GeminiLiveTransport transport = mock(GeminiLiveTransport.class);
+    when(transport.sendClientContent(any())).thenReturn(CompletableFuture.completedFuture(null));
+    GeminiLlmConnection connection = connectionForTransport(transport, "gemini-3.8-live");
+    Content content = Content.fromParts(Part.fromText("hello 3.8"));
+
+    connection.sendContent(content, true).blockingAwait();
+
+    ArgumentCaptor<LiveSendClientContentParameters> clientContentCaptor =
+        ArgumentCaptor.forClass(LiveSendClientContentParameters.class);
+    verify(transport).sendClientContent(clientContentCaptor.capture());
+    assertThat(clientContentCaptor.getValue().turns().get()).containsExactly(content);
+    assertThat(clientContentCaptor.getValue().turnComplete()).hasValue(true);
+    verify(transport, never()).sendRealtimeInput(any());
+  }
+
+  @Test
   public void sendRealtime_withGemini31LiveAudio_usesAudioField() {
     GeminiLiveTransport transport = mock(GeminiLiveTransport.class);
     when(transport.sendRealtimeInput(any())).thenReturn(CompletableFuture.completedFuture(null));
@@ -125,6 +142,7 @@ public final class GeminiLlmConnectionTest {
     verify(transport).sendRealtimeInput(realtimeCaptor.capture());
     assertThat(realtimeCaptor.getValue().audio()).hasValue(audio);
     assertThat(realtimeCaptor.getValue().media()).isEmpty();
+    assertThat(realtimeCaptor.getValue().video()).isEmpty();
   }
 
   @Test
@@ -141,10 +159,65 @@ public final class GeminiLlmConnectionTest {
     verify(transport).sendRealtimeInput(realtimeCaptor.capture());
     assertThat(realtimeCaptor.getValue().video()).hasValue(video);
     assertThat(realtimeCaptor.getValue().media()).isEmpty();
+    assertThat(realtimeCaptor.getValue().audio()).isEmpty();
   }
 
   @Test
-  public void sendRealtime_withGemini25Live_keepsMediaField() {
+  public void sendRealtime_withGemini38LiveAudio_usesAudioField() {
+    GeminiLiveTransport transport = mock(GeminiLiveTransport.class);
+    when(transport.sendRealtimeInput(any())).thenReturn(CompletableFuture.completedFuture(null));
+    GeminiLlmConnection connection = connectionForTransport(transport, "gemini-3.8-live");
+    Blob audio = Blob.builder().mimeType("audio/pcm;rate=16000").data(new byte[] {1}).build();
+
+    connection.sendRealtime(audio).blockingAwait();
+
+    ArgumentCaptor<LiveSendRealtimeInputParameters> realtimeCaptor =
+        ArgumentCaptor.forClass(LiveSendRealtimeInputParameters.class);
+    verify(transport).sendRealtimeInput(realtimeCaptor.capture());
+    assertThat(realtimeCaptor.getValue().audio()).hasValue(audio);
+    assertThat(realtimeCaptor.getValue().video()).isEmpty();
+    assertThat(realtimeCaptor.getValue().media()).isEmpty();
+  }
+
+  @Test
+  public void sendRealtime_withGemini38LiveVideo_usesVideoField() {
+    GeminiLiveTransport transport = mock(GeminiLiveTransport.class);
+    when(transport.sendRealtimeInput(any())).thenReturn(CompletableFuture.completedFuture(null));
+    GeminiLlmConnection connection = connectionForTransport(transport, "gemini-3.8-live");
+    Blob video = Blob.builder().mimeType("image/jpeg").data(new byte[] {1}).build();
+
+    connection.sendRealtime(video).blockingAwait();
+
+    ArgumentCaptor<LiveSendRealtimeInputParameters> realtimeCaptor =
+        ArgumentCaptor.forClass(LiveSendRealtimeInputParameters.class);
+    verify(transport).sendRealtimeInput(realtimeCaptor.capture());
+    assertThat(realtimeCaptor.getValue().video()).hasValue(video);
+    assertThat(realtimeCaptor.getValue().audio()).isEmpty();
+    assertThat(realtimeCaptor.getValue().media()).isEmpty();
+  }
+
+  @Test
+  public void sendRealtime_withQualifiedGemini38LiveVideo_usesVideoField() {
+    GeminiLiveTransport transport = mock(GeminiLiveTransport.class);
+    when(transport.sendRealtimeInput(any())).thenReturn(CompletableFuture.completedFuture(null));
+    GeminiLlmConnection connection =
+        connectionForTransport(
+            transport,
+            "projects/test/locations/us-central1/publishers/google/models/gemini-3.8-live");
+    Blob video = Blob.builder().mimeType("video/webm").data(new byte[] {1}).build();
+
+    connection.sendRealtime(video).blockingAwait();
+
+    ArgumentCaptor<LiveSendRealtimeInputParameters> realtimeCaptor =
+        ArgumentCaptor.forClass(LiveSendRealtimeInputParameters.class);
+    verify(transport).sendRealtimeInput(realtimeCaptor.capture());
+    assertThat(realtimeCaptor.getValue().video()).hasValue(video);
+    assertThat(realtimeCaptor.getValue().audio()).isEmpty();
+    assertThat(realtimeCaptor.getValue().media()).isEmpty();
+  }
+
+  @Test
+  public void sendRealtime_withGemini25LiveAudio_keepsMediaField() {
     GeminiLiveTransport transport = mock(GeminiLiveTransport.class);
     when(transport.sendRealtimeInput(any())).thenReturn(CompletableFuture.completedFuture(null));
     GeminiLlmConnection connection = connectionForTransport(transport, "gemini-2.5-flash-live");
@@ -157,6 +230,92 @@ public final class GeminiLlmConnectionTest {
     verify(transport).sendRealtimeInput(realtimeCaptor.capture());
     assertThat(realtimeCaptor.getValue().media()).hasValue(audio);
     assertThat(realtimeCaptor.getValue().audio()).isEmpty();
+    assertThat(realtimeCaptor.getValue().video()).isEmpty();
+  }
+
+  @Test
+  public void sendRealtime_withGemini25LiveVideo_keepsMediaField() {
+    GeminiLiveTransport transport = mock(GeminiLiveTransport.class);
+    when(transport.sendRealtimeInput(any())).thenReturn(CompletableFuture.completedFuture(null));
+    GeminiLlmConnection connection = connectionForTransport(transport, "gemini-2.5-flash-live");
+    Blob video = Blob.builder().mimeType("image/jpeg").data(new byte[] {1}).build();
+
+    connection.sendRealtime(video).blockingAwait();
+
+    ArgumentCaptor<LiveSendRealtimeInputParameters> realtimeCaptor =
+        ArgumentCaptor.forClass(LiveSendRealtimeInputParameters.class);
+    verify(transport).sendRealtimeInput(realtimeCaptor.capture());
+    assertThat(realtimeCaptor.getValue().media()).hasValue(video);
+    assertThat(realtimeCaptor.getValue().audio()).isEmpty();
+    assertThat(realtimeCaptor.getValue().video()).isEmpty();
+  }
+
+  @Test
+  public void sendRealtime_withNonLiveGemini38Video_keepsMediaField() {
+    GeminiLiveTransport transport = mock(GeminiLiveTransport.class);
+    when(transport.sendRealtimeInput(any())).thenReturn(CompletableFuture.completedFuture(null));
+    GeminiLlmConnection connection = connectionForTransport(transport, "gemini-3.8-flash");
+    Blob video = Blob.builder().mimeType("image/jpeg").data(new byte[] {1}).build();
+
+    connection.sendRealtime(video).blockingAwait();
+
+    ArgumentCaptor<LiveSendRealtimeInputParameters> realtimeCaptor =
+        ArgumentCaptor.forClass(LiveSendRealtimeInputParameters.class);
+    verify(transport).sendRealtimeInput(realtimeCaptor.capture());
+    assertThat(realtimeCaptor.getValue().media()).hasValue(video);
+    assertThat(realtimeCaptor.getValue().audio()).isEmpty();
+    assertThat(realtimeCaptor.getValue().video()).isEmpty();
+  }
+
+  @Test
+  public void sendRealtime_withUnknownLiveModelVideo_keepsMediaField() {
+    GeminiLiveTransport transport = mock(GeminiLiveTransport.class);
+    when(transport.sendRealtimeInput(any())).thenReturn(CompletableFuture.completedFuture(null));
+    GeminiLlmConnection connection = connectionForTransport(transport, "custom-video-live");
+    Blob video = Blob.builder().mimeType("image/jpeg").data(new byte[] {1}).build();
+
+    connection.sendRealtime(video).blockingAwait();
+
+    ArgumentCaptor<LiveSendRealtimeInputParameters> realtimeCaptor =
+        ArgumentCaptor.forClass(LiveSendRealtimeInputParameters.class);
+    verify(transport).sendRealtimeInput(realtimeCaptor.capture());
+    assertThat(realtimeCaptor.getValue().media()).hasValue(video);
+    assertThat(realtimeCaptor.getValue().audio()).isEmpty();
+    assertThat(realtimeCaptor.getValue().video()).isEmpty();
+  }
+
+  @Test
+  public void sendRealtime_withGemini30LiveVideo_keepsMediaField() {
+    GeminiLiveTransport transport = mock(GeminiLiveTransport.class);
+    when(transport.sendRealtimeInput(any())).thenReturn(CompletableFuture.completedFuture(null));
+    GeminiLlmConnection connection = connectionForTransport(transport, "gemini-30-live");
+    Blob video = Blob.builder().mimeType("image/jpeg").data(new byte[] {1}).build();
+
+    connection.sendRealtime(video).blockingAwait();
+
+    ArgumentCaptor<LiveSendRealtimeInputParameters> realtimeCaptor =
+        ArgumentCaptor.forClass(LiveSendRealtimeInputParameters.class);
+    verify(transport).sendRealtimeInput(realtimeCaptor.capture());
+    assertThat(realtimeCaptor.getValue().media()).hasValue(video);
+    assertThat(realtimeCaptor.getValue().audio()).isEmpty();
+    assertThat(realtimeCaptor.getValue().video()).isEmpty();
+  }
+
+  @Test
+  public void sendRealtime_withGemini38LiveUnknownMime_keepsMediaField() {
+    GeminiLiveTransport transport = mock(GeminiLiveTransport.class);
+    when(transport.sendRealtimeInput(any())).thenReturn(CompletableFuture.completedFuture(null));
+    GeminiLlmConnection connection = connectionForTransport(transport, "gemini-3.8-live");
+    Blob opaque = Blob.builder().mimeType("application/octet-stream").data(new byte[] {1}).build();
+
+    connection.sendRealtime(opaque).blockingAwait();
+
+    ArgumentCaptor<LiveSendRealtimeInputParameters> realtimeCaptor =
+        ArgumentCaptor.forClass(LiveSendRealtimeInputParameters.class);
+    verify(transport).sendRealtimeInput(realtimeCaptor.capture());
+    assertThat(realtimeCaptor.getValue().media()).hasValue(opaque);
+    assertThat(realtimeCaptor.getValue().audio()).isEmpty();
+    assertThat(realtimeCaptor.getValue().video()).isEmpty();
   }
 
   private static GeminiLlmConnection connectionForTransport(

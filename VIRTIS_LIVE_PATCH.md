@@ -223,7 +223,7 @@ were not transplanted/run on that head, and no rebase or merge occurred.
 | Explicit incomplete queued content prevents hidden instructions from completing a turn. | Upstream now has `LiveRequest.partial`, `isPartial`, and `sendContent(content, partial)` mapping to SDK `turnComplete(!partial)`. Behavior is available, but the same boolean overload has the **opposite polarity** from the consumed Virtis `turnComplete` API; no compatible end-to-end equivalence proof. | Adapt explicitly: invert the flag at a retained compatibility boundary or migrate every Virtis caller/test together. Never resolve this conflict by copying signatures. Drop redundant internal code only after false/true/system/tool cases pass. |
 | Typed initial resumption config carries Gemini's persisted handle into setup. | `RunConfig.sessionResumption` and `Basic` setup propagation absent. | Keep; remove only after actual setup/copy tests prove an upstream replacement. |
 | Provider handle updates reach Gemini's durable/fenced owner even without content. | No `liveSessionResumptionUpdate` fields/conversion in checked connection/response/event/flow. | Keep builders/copies/JSON/equality/hash and the contentless-event guard as one boundary. |
-| Model-specific 3.1 text/audio/video shapes preserve selected-model behavior while 2.5 remains compatible. | Checked upstream connection still sends all realtime blobs through `media` and ordinary content through client content; it does not receive the resolved model name. | Keep/adapt the full model-name-to-SDK mapping and incomplete-system exception; do not infer equivalence from a newer SDK alone. |
+| Model-specific 3.1 text and Live Gemini 3.x audio/video shapes preserve selected-model behavior while 2.5 remains compatible. | Checked upstream connection still sends all realtime blobs through `media` and ordinary content through client content; it does not receive the resolved model name. | Keep/adapt the full model-name-to-SDK mapping and incomplete-system exception; do not infer equivalence from a newer SDK alone. |
 | Bounded diagnostics prevent sensitive setup, provider messages, event bodies and handles entering logs. | Checked upstream still serializes received/unknown messages, setup config and model event/function-call data in diagnostics. | Keep all three production logging boundaries; retain safe presence-only regression. |
 | Typed compression makes the selected setup enable provider-default sliding-window compression. | No RunConfig/Basic compression propagation in checked upstream. | Keep; actual outgoing setup/default/explicit-override tests decide removal. |
 | Typed GoAway informs the product without treating a contentless lifecycle message as unknown. | No GoAway conversion/event field in checked upstream. | Keep response/event/copy/JSON/contentless flow pieces together. |
@@ -250,9 +250,13 @@ become `LlmResponse.liveSessionResumptionUpdate` and then
 opaque update remains distinct from ordinary conversation content.
 
 Resolved Gemini 3.1 Live models send ordinary text through the realtime text
-field and map audio to realtime audio and image/video to realtime video.
-Gemini 2.5 continues to use the existing media field. System-role content stays
-on client-content transport so `turnComplete=false` remains expressible.
+field. Resolved Live Gemini 3.x models map audio to realtime audio and
+image/video to realtime video. Gemini 3.8 ordinary text and all Gemini 2.5
+realtime blobs retain their existing client-content/media-field behavior.
+System-role content stays on client-content transport so `turnComplete=false`
+remains expressible. The split-media predicate evaluates the resolved model
+basename and therefore accepts qualified resource names without classifying
+non-Live or arbitrary `gemini-30` names as Gemini 3.x Live.
 
 Live diagnostics derive only a fixed list of present message kinds. They never
 serialize or interpolate a `LiveServerMessage`, provider body, media bytes, or

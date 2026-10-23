@@ -366,7 +366,7 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
   }
 
   private LiveSendRealtimeInputParameters realtimeInputParameters(Blob blob) {
-    if (!isGemini31LiveModel()) {
+    if (!usesSplitRealtimeMediaFields()) {
       return LiveSendRealtimeInputParameters.builder().media(blob).build();
     }
     String mimeType = blob.mimeType().orElse("").toLowerCase(Locale.ROOT);
@@ -377,6 +377,13 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
       return LiveSendRealtimeInputParameters.builder().video(blob).build();
     }
     return LiveSendRealtimeInputParameters.builder().media(blob).build();
+  }
+
+  private boolean usesSplitRealtimeMediaFields() {
+    String normalizedModelName = modelName.toLowerCase(Locale.ROOT);
+    int basenameOffset = normalizedModelName.lastIndexOf('/') + 1;
+    String modelBasename = normalizedModelName.substring(basenameOffset);
+    return modelBasename.startsWith("gemini-3.") && modelBasename.contains("-live");
   }
 
   private Completable sendRealtimeText(String text) {
