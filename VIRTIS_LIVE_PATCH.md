@@ -19,6 +19,87 @@ The accepted immutable artifact coordinate and hashes are:
 - JAR SHA-256
   `309fdf5d546af5c9fd9a61eb153563f0da0356dbd659b755135428a0f68f72ea`.
 
+## Fork release `virtis-v1.12.0-2`
+
+The next Virtis fork release is `virtis-v1.12.0-2`, following the existing
+annotated tag `virtis-v1.12.0-1`. This is fork patch line 2 over the exact
+upstream ADK Java `v1.12.0` baseline; it is not upstream ADK Java 1.13.0. Keep
+the Maven parent/module versions, `Version.JAVA_ADK_VERSION`, README examples,
+release-please manifest and upstream changelog at `1.12.0`. The Virtis suffix
+belongs to the annotated fork tag, not the upstream library version fields.
+
+Release notes since `virtis-v1.12.0-1`:
+
+- typed provider-default Live context-window compression reaches the SDK setup;
+- typed GoAway, bounded indexed transparent rotation/replay and safe scalar
+  recovery observation cover the supported public transport boundary;
+- cancellation and late-open handling prevent orphaned sender/connection work;
+- Gemini 3.1 retains realtime text, while Live Gemini 3.x audio and image/video
+  use the SDK audio and video fields respectively; Gemini 3.8 text and dormant
+  2.5 compatibility keep their existing behavior;
+- the complete fork inventory now records the exact upstream comparison,
+  limitations, focused/full provider-disabled proof and rebase guidance.
+
+Release preparation stops at a reviewed, pushed commit. It does not create or
+push the tag, create a GitHub release, publish Maven artifacts, run Cloud Build,
+merge or deploy. After approval, a maintainer creates the annotated tag at the
+exact release commit:
+
+```sh
+git tag -a virtis-v1.12.0-2 <release-commit-sha> \
+  -m 'Virtis ADK Java v1.12.0 patch line 2'
+git push origin virtis-v1.12.0-2
+```
+
+### Immutable Maven publication and consumer pin
+
+This fork uses JitPack, not the repository's upstream Maven Central release
+profile. The immutable consumer version remains the full 40-character release
+commit SHA. The human tag is release metadata and must not replace that SHA in
+Gemini. From a fresh isolated Maven repository, demand-build and install the
+exact JitPack module with:
+
+```sh
+release_m2="$(mktemp -d)"
+release_sha='<release-commit-sha>'
+./mvnw -q -Dmaven.repo.local="${release_m2}" \
+  org.apache.maven.plugins:maven-dependency-plugin:3.8.1:get \
+  -Dartifact="com.github.DecilAI2025.adk-java:google-adk:${release_sha}" \
+  -DremoteRepositories="jitpack::default::https://jitpack.io"
+```
+
+The resulting files must be regular, non-symlinked files at:
+
+```text
+${release_m2}/com/github/DecilAI2025/adk-java/google-adk/${release_sha}/google-adk-${release_sha}.pom
+${release_m2}/com/github/DecilAI2025/adk-java/google-adk/${release_sha}/google-adk-${release_sha}.jar
+```
+
+Record both SHA-256 values, compare JitPack's SHA-1 sidecars, verify the JAR
+contains `com/google/adk/agents/RunConfig$LiveRecoveryEvent.class`, and resolve
+the same coordinate offline from that isolated repository. Do not overwrite or
+relabel an older coordinate, and do not use a locally rebuilt
+`com.google.adk:google-adk:1.12.0` artifact as publication evidence.
+
+Gemini production then keeps its existing JitPack repository and dependency
+identity and changes only its version property to the verified release commit:
+
+```xml
+<google.adk.version>&lt;release-commit-sha&gt;</google.adk.version>
+
+<dependency>
+  <groupId>com.github.DecilAI2025.adk-java</groupId>
+  <artifactId>google-adk</artifactId>
+  <version>${google.adk.version}</version>
+</dependency>
+```
+
+The pin is accepted only after a clean-repository resolution, artifact-hash and
+class-content checks, Gemini's dependency-artifact regression, the unchanged
+compression/GoAway/run-config tests and its full Maven gate. Branch names,
+moving references, the human tag alone and a prepopulated default Maven cache
+are not production provenance.
+
 The accepted fork's behavior groups are:
 
 - explicit queued-content `turnComplete`, including `false` for incomplete
