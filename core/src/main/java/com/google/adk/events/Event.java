@@ -37,6 +37,8 @@ import com.google.genai.types.FunctionCall;
 import com.google.genai.types.FunctionResponse;
 import com.google.genai.types.GenerateContentResponseUsageMetadata;
 import com.google.genai.types.GroundingMetadata;
+import com.google.genai.types.LiveServerGoAway;
+import com.google.genai.types.LiveServerSessionResumptionUpdate;
 import com.google.genai.types.Transcription;
 import java.time.InstantSource;
 import java.util.List;
@@ -70,6 +72,8 @@ public class Event extends JsonBaseModel {
   private @Nullable String modelVersion;
   private @Nullable Transcription inputTranscription;
   private @Nullable Transcription outputTranscription;
+  private @Nullable LiveServerSessionResumptionUpdate liveSessionResumptionUpdate;
+  private @Nullable LiveServerGoAway liveGoAway;
   private @Nullable Object output;
   private @Nullable NodeInfo nodeInfo;
   private @Nullable CacheMetadata cacheMetadata;
@@ -329,6 +333,27 @@ public class Event extends JsonBaseModel {
     this.outputTranscription = outputTranscription;
   }
 
+  /** Live session resumption state update emitted by the Live API. */
+  @JsonProperty("liveSessionResumptionUpdate")
+  public Optional<LiveServerSessionResumptionUpdate> liveSessionResumptionUpdate() {
+    return Optional.ofNullable(liveSessionResumptionUpdate);
+  }
+
+  public void setLiveSessionResumptionUpdate(
+      @Nullable LiveServerSessionResumptionUpdate liveSessionResumptionUpdate) {
+    this.liveSessionResumptionUpdate = liveSessionResumptionUpdate;
+  }
+
+  /** Safe provider notification; no provider payload or resumption handle is included. */
+  @JsonProperty("liveGoAway")
+  public Optional<LiveServerGoAway> liveGoAway() {
+    return Optional.ofNullable(liveGoAway);
+  }
+
+  public void setLiveGoAway(@Nullable LiveServerGoAway liveGoAway) {
+    this.liveGoAway = liveGoAway;
+  }
+
   /**
    * For a workflow node, returns the value handed to successors, distinct from {@link #content()},
    * or empty when the event carries no node output. Holds any value Jackson can serialize, such as
@@ -503,6 +528,8 @@ public class Event extends JsonBaseModel {
     private @Nullable String modelVersion;
     private @Nullable Transcription inputTranscription;
     private @Nullable Transcription outputTranscription;
+    private @Nullable LiveServerSessionResumptionUpdate liveSessionResumptionUpdate;
+    private @Nullable LiveServerGoAway liveGoAway;
     private @Nullable Object output;
     private @Nullable NodeInfo nodeInfo;
     private @Nullable CacheMetadata cacheMetadata;
@@ -691,6 +718,20 @@ public class Event extends JsonBaseModel {
       return this;
     }
 
+    @CanIgnoreReturnValue
+    @JsonProperty("liveSessionResumptionUpdate")
+    public Builder liveSessionResumptionUpdate(@Nullable LiveServerSessionResumptionUpdate value) {
+      this.liveSessionResumptionUpdate = value;
+      return this;
+    }
+
+    @CanIgnoreReturnValue
+    @JsonProperty("liveGoAway")
+    public Builder liveGoAway(@Nullable LiveServerGoAway value) {
+      this.liveGoAway = value;
+      return this;
+    }
+
     @Experimental
     @CanIgnoreReturnValue
     @JsonProperty("output")
@@ -739,6 +780,8 @@ public class Event extends JsonBaseModel {
           timestamp().orElseGet(() -> InstantSource.system().instant().toEpochMilli()));
       event.setInputTranscription(inputTranscription);
       event.setOutputTranscription(outputTranscription);
+      event.setLiveSessionResumptionUpdate(liveSessionResumptionUpdate);
+      event.setLiveGoAway(liveGoAway);
       event.setOutput(output);
       event.setNodeInfo(nodeInfo);
       event.setCacheMetadata(cacheMetadata);
@@ -779,6 +822,8 @@ public class Event extends JsonBaseModel {
         .modelVersion(this.modelVersion)
         .inputTranscription(this.inputTranscription)
         .outputTranscription(this.outputTranscription)
+        .liveSessionResumptionUpdate(this.liveSessionResumptionUpdate)
+        .liveGoAway(this.liveGoAway)
         .output(this.output)
         .nodeInfo(this.nodeInfo)
         .cacheMetadata(this.cacheMetadata)
@@ -815,6 +860,8 @@ public class Event extends JsonBaseModel {
         && Objects.equals(modelVersion, other.modelVersion)
         && Objects.equals(inputTranscription, other.inputTranscription)
         && Objects.equals(outputTranscription, other.outputTranscription)
+        && Objects.equals(liveSessionResumptionUpdate, other.liveSessionResumptionUpdate)
+        && Objects.equals(liveGoAway, other.liveGoAway)
         && Objects.equals(output, other.output)
         && Objects.equals(nodeInfo, other.nodeInfo)
         && Objects.equals(cacheMetadata, other.cacheMetadata);
@@ -849,6 +896,8 @@ public class Event extends JsonBaseModel {
         modelVersion,
         inputTranscription,
         outputTranscription,
+        liveSessionResumptionUpdate,
+        liveGoAway,
         output,
         nodeInfo,
         cacheMetadata,

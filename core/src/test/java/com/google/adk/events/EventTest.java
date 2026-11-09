@@ -28,8 +28,11 @@ import com.google.genai.types.Content;
 import com.google.genai.types.FinishReason;
 import com.google.genai.types.FunctionCall;
 import com.google.genai.types.GenerateContentResponseUsageMetadata;
+import com.google.genai.types.LiveServerGoAway;
+import com.google.genai.types.LiveServerSessionResumptionUpdate;
 import com.google.genai.types.Part;
 import com.google.genai.types.Transcription;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -382,6 +385,30 @@ public final class EventTest {
   }
 
   @Test
+  public void event_jsonAndBuilderCopy_preserveLiveSessionResumptionUpdate() throws Exception {
+    LiveServerSessionResumptionUpdate update =
+        LiveServerSessionResumptionUpdate.builder()
+            .newHandle("resume-handle")
+            .resumable(true)
+            .lastConsumedClientMessageIndex(17L)
+            .build();
+    Event event =
+        Event.builder()
+            .id("event_id")
+            .invocationId("invocation_id")
+            .author("agent")
+            .timestamp(123456789L)
+            .liveSessionResumptionUpdate(update)
+            .build();
+
+    Event deserialized = Event.fromJson(event.toJson());
+
+    assertThat(deserialized).isEqualTo(event);
+    assertThat(deserialized.liveSessionResumptionUpdate()).hasValue(update);
+    assertThat(event.toBuilder().build()).isEqualTo(event);
+  }
+
+  @Test
   public void event_cacheMetadata_survivesJsonAndToBuilder() {
     CacheMetadata cacheMetadata =
         CacheMetadata.builder()
@@ -399,6 +426,17 @@ public final class EventTest {
     assertThat(Event.fromJson(event.toJson()).cacheMetadata()).hasValue(cacheMetadata);
     assertThat(event).isNotEqualTo(EVENT);
     assertThat(event.hashCode()).isNotEqualTo(EVENT.hashCode());
+  }
+
+  @Test
+  public void event_goAwaySurvivesJsonAndCopy() {
+    LiveServerGoAway goAway = LiveServerGoAway.builder().timeLeft(Duration.ofSeconds(10)).build();
+    Event event = EVENT.toBuilder().liveGoAway(goAway).build();
+
+    assertThat(event.liveGoAway()).hasValue(goAway);
+    assertThat(event.toBuilder().build()).isEqualTo(event);
+    assertThat(Event.fromJson(event.toJson())).isEqualTo(event);
+    assertThat(event).isNotEqualTo(EVENT);
   }
 
   @Test

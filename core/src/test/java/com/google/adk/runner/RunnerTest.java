@@ -42,6 +42,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.Assert.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
@@ -55,6 +56,7 @@ import com.google.adk.agents.BaseAgent;
 import com.google.adk.agents.Callbacks;
 import com.google.adk.agents.Callbacks.AfterModelCallback;
 import com.google.adk.agents.InvocationContext;
+import com.google.adk.agents.LiveRequest;
 import com.google.adk.agents.LiveRequestQueue;
 import com.google.adk.agents.LlmAgent;
 import com.google.adk.agents.ParallelAgent;
@@ -98,6 +100,8 @@ import com.google.genai.types.Content;
 import com.google.genai.types.FunctionCall;
 import com.google.genai.types.FunctionDeclaration;
 import com.google.genai.types.FunctionResponse;
+import com.google.genai.types.LiveServerGoAway;
+import com.google.genai.types.LiveServerSessionResumptionUpdate;
 import com.google.genai.types.Part;
 import com.google.genai.types.PartialArg;
 import com.google.genai.types.Schema;
@@ -2033,6 +2037,96 @@ public final class RunnerTest {
     assertThat(liveRequestTexts(testLlm)).contains("from user");
     // The hop that starts the live send loop went through the runner's scheduler.
     assertThat(recordingScheduler.workersCreated()).isEqualTo(1);
+  }
+
+  @Test
+  public void runLive_incompleteContentPropagatesPartialToConnection() throws Exception {
+    LiveRequestQueue liveRequestQueue = new LiveRequestQueue();
+    TestSubscriber<Event> testSubscriber =
+        runner.runLive(session, liveRequestQueue, RunConfig.builder().build()).test();
+
+    liveRequestQueue.content(createContent("hidden control"), true);
+    liveRequestQueue.close();
+
+    testSubscriber.await();
+    testSubscriber.assertComplete();
+    assertThat(testLlm.getLiveRequestHistory().get(0).content()).isPresent();
+    assertThat(testLlm.getLiveRequestHistory().get(0).isPartial()).isTrue();
+    assertThat(testLlm.getLiveRequestHistory().stream().filter(LiveRequest::shouldClose).count())
+        .isAtLeast(1);
+  }
+
+  @Test
+  public void runLive_contentlessSessionResumptionUpdatePropagatesToEvent() throws Exception {
+    LiveServerSessionResumptionUpdate update =
+        LiveServerSessionResumptionUpdate.builder()
+            .newHandle("opaque-resume-handle")
+            .resumable(true)
+            .lastConsumedClientMessageIndex(17L)
+            .build();
+    TestLlm liveTestLlm =
+        TestLlm.create(LlmResponse.builder().liveSessionResumptionUpdate(update).build());
+    LlmAgent liveAgent = createTestAgentBuilder(liveTestLlm).build();
+    Runner liveRunner =
+        Runner.builder().app(App.builder().name("test").rootAgent(liveAgent).build()).build();
+    Session liveSession = liveRunner.sessionService().createSession("test", "user").blockingGet();
+    LiveRequestQueue liveRequestQueue = new LiveRequestQueue();
+
+    TestSubscriber<Event> testSubscriber =
+        liveRunner.runLive(liveSession, liveRequestQueue, RunConfig.builder().build()).test();
+    liveRequestQueue.close();
+
+    testSubscriber.await();
+    testSubscriber.assertComplete();
+    assertThat(testSubscriber.values()).hasSize(1);
+    assertThat(testSubscriber.values().get(0).content()).isEmpty();
+    assertThat(testSubscriber.values().get(0).liveSessionResumptionUpdate()).hasValue(update);
+  }
+
+  @Test
+  public void runLive_cancellationClosesConnectionAndStopsSender() {
+    BaseLlm llm = mock(BaseLlm.class);
+    when(llm.model()).thenReturn("gemini-2.0-flash");
+    BaseLlmConnection connection = mock(BaseLlmConnection.class);
+    when(llm.connect(any())).thenReturn(connection);
+    when(connection.receive()).thenReturn(Flowable.never());
+    when(connection.sendContent(any(), anyBoolean())).thenReturn(Completable.complete());
+    LlmAgent liveAgent = LlmAgent.builder().name("liveAgent").model(llm).build();
+    Runner liveRunner =
+        Runner.builder()
+            .app(App.builder().name("test").rootAgent(liveAgent).build())
+            .scheduler(Schedulers.trampoline())
+            .build();
+    Session liveSession = liveRunner.sessionService().createSession("test", "user").blockingGet();
+    LiveRequestQueue queue = new LiveRequestQueue();
+    TestSubscriber<Event> subscriber =
+        liveRunner.runLive(liveSession, queue, RunConfig.builder().build()).test();
+
+    subscriber.assertNoErrors();
+    subscriber.cancel();
+    queue.content(createContent("after cancellation"));
+
+    verify(connection).close();
+    verify(connection, never()).sendContent(any(), anyBoolean());
+  }
+
+  @Test
+  public void runLive_contentlessGoAwayPropagatesToEvent() throws Exception {
+    LiveServerGoAway goAway = LiveServerGoAway.builder().build();
+    TestLlm liveTestLlm = TestLlm.create(LlmResponse.builder().liveGoAway(goAway).build());
+    LlmAgent liveAgent = createTestAgentBuilder(liveTestLlm).build();
+    Runner liveRunner =
+        Runner.builder().app(App.builder().name("test").rootAgent(liveAgent).build()).build();
+    Session liveSession = liveRunner.sessionService().createSession("test", "user").blockingGet();
+    LiveRequestQueue queue = new LiveRequestQueue();
+
+    TestSubscriber<Event> subscriber =
+        liveRunner.runLive(liveSession, queue, RunConfig.builder().build()).test();
+    queue.close();
+
+    subscriber.await();
+    subscriber.assertComplete().assertValueCount(1);
+    assertThat(subscriber.values().get(0).liveGoAway()).hasValue(goAway);
   }
 
   @Test

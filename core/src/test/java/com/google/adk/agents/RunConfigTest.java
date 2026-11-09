@@ -22,8 +22,11 @@ import static org.junit.Assert.assertThrows;
 import com.google.common.collect.ImmutableList;
 import com.google.genai.types.AudioTranscriptionConfig;
 import com.google.genai.types.AvatarConfig;
+import com.google.genai.types.ContextWindowCompressionConfig;
 import com.google.genai.types.CustomizedAvatar;
 import com.google.genai.types.Modality;
+import com.google.genai.types.SessionResumptionConfig;
+import com.google.genai.types.SlidingWindow;
 import com.google.genai.types.SpeechConfig;
 import java.util.Optional;
 import org.junit.Test;
@@ -38,6 +41,8 @@ public final class RunConfigTest {
   public void testBuilderWithVariousValues() {
     SpeechConfig speechConfig = SpeechConfig.builder().build();
     AudioTranscriptionConfig audioTranscriptionConfig = AudioTranscriptionConfig.builder().build();
+    SessionResumptionConfig sessionResumption =
+        SessionResumptionConfig.builder().transparent(true).handle("resume-handle").build();
 
     RunConfig runConfig =
         RunConfig.builder()
@@ -47,6 +52,7 @@ public final class RunConfigTest {
             .setStreamingMode(RunConfig.StreamingMode.SSE)
             .setOutputAudioTranscription(audioTranscriptionConfig)
             .setInputAudioTranscription(audioTranscriptionConfig)
+            .sessionResumption(sessionResumption)
             .setMaxLlmCalls(10)
             .build();
 
@@ -56,6 +62,7 @@ public final class RunConfigTest {
     assertThat(runConfig.streamingMode()).isEqualTo(RunConfig.StreamingMode.SSE);
     assertThat(runConfig.outputAudioTranscription()).isEqualTo(audioTranscriptionConfig);
     assertThat(runConfig.inputAudioTranscription()).isEqualTo(audioTranscriptionConfig);
+    assertThat(runConfig.sessionResumption()).isEqualTo(sessionResumption);
     assertThat(runConfig.maxLlmCalls()).isEqualTo(10);
   }
 
@@ -70,6 +77,11 @@ public final class RunConfigTest {
     assertThat(runConfig.streamingMode()).isEqualTo(RunConfig.StreamingMode.NONE);
     assertThat(runConfig.outputAudioTranscription()).isNull();
     assertThat(runConfig.inputAudioTranscription()).isNull();
+    assertThat(runConfig.sessionResumption()).isNull();
+    assertThat(runConfig.contextWindowCompression()).isNull();
+    assertThat(runConfig.liveResumptionReplayMaxMessages()).isEqualTo(4096);
+    assertThat(runConfig.liveResumptionReplayMaxBytes()).isEqualTo(8388608L);
+    assertThat(runConfig.liveRecoveryObserver()).isNull();
     assertThat(runConfig.maxLlmCalls()).isEqualTo(500);
     assertThat(runConfig.autoCreateSession()).isFalse();
     assertThat(runConfig.dollarEscapedPlaceholders()).isFalse();
@@ -83,6 +95,50 @@ public final class RunConfigTest {
 
     assertThat(RunConfig.builder(source).build().dollarEscapedPlaceholders()).isTrue();
     assertThat(source.toBuilder().build().dollarEscapedPlaceholders()).isTrue();
+  }
+
+  @Test
+  public void testBuilderCopiesSessionResumption() {
+    SessionResumptionConfig sessionResumption =
+        SessionResumptionConfig.builder().transparent(true).handle("resume-handle").build();
+    RunConfig original = RunConfig.builder().sessionResumption(sessionResumption).build();
+
+    RunConfig copy = RunConfig.builder(original).build();
+
+    assertThat(copy.sessionResumption()).isEqualTo(sessionResumption);
+  }
+
+  @Test
+  public void liveReplayBoundsMustBePositiveAndSurviveCopies() {
+    java.util.function.Consumer<RunConfig.LiveRecoveryEvent> observer = event -> {};
+    RunConfig config =
+        RunConfig.builder()
+            .liveResumptionReplayMaxMessages(7)
+            .liveResumptionReplayMaxBytes(99L)
+            .liveRecoveryObserver(observer)
+            .build();
+    assertThat(RunConfig.builder(config).build().liveRecoveryObserver()).isSameInstanceAs(observer);
+    assertThat(config.toBuilder().build().liveRecoveryObserver()).isSameInstanceAs(observer);
+    assertThat(RunConfig.builder(config).build().liveResumptionReplayMaxMessages()).isEqualTo(7);
+    assertThat(config.toBuilder().build().liveResumptionReplayMaxBytes()).isEqualTo(99L);
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> RunConfig.builder().liveResumptionReplayMaxMessages(0).build());
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> RunConfig.builder().liveResumptionReplayMaxBytes(-1L).build());
+  }
+
+  @Test
+  public void testBuilderCopiesTypedContextWindowCompression() {
+    ContextWindowCompressionConfig compression =
+        ContextWindowCompressionConfig.builder()
+            .slidingWindow(SlidingWindow.builder().build())
+            .build();
+    RunConfig original = RunConfig.builder().contextWindowCompression(compression).build();
+
+    assertThat(RunConfig.builder(original).build().contextWindowCompression())
+        .isEqualTo(compression);
   }
 
   @Test

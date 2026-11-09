@@ -57,6 +57,34 @@ public final class LlmRequestTest {
     assertThat(request.liveConnectConfig().temperature()).isEmpty();
     assertThat(request.liveConnectConfig().systemInstruction()).isEmpty();
     assertThat(request.tools()).isEmpty();
+    assertThat(request.liveResumptionReplayMaxMessages()).isEqualTo(4096);
+    assertThat(request.liveResumptionReplayMaxBytes()).isEqualTo(8388608L);
+    assertThat(request.liveRecoveryObserver()).isNull();
+  }
+
+  @Test
+  public void localReplayBoundsCopyAndNeverEnterProviderJson() {
+    java.util.function.Consumer<com.google.adk.agents.RunConfig.LiveRecoveryEvent> observer =
+        event -> {};
+    LlmRequest request =
+        LlmRequest.builder()
+            .liveResumptionReplayMaxMessages(17)
+            .liveResumptionReplayMaxBytes(1024L)
+            .liveRecoveryObserver(observer)
+            .build();
+
+    assertThat(request.toBuilder().build().liveResumptionReplayMaxMessages()).isEqualTo(17);
+    assertThat(request.toBuilder().build().liveResumptionReplayMaxBytes()).isEqualTo(1024L);
+    assertThat(request.toBuilder().build().liveRecoveryObserver()).isSameInstanceAs(observer);
+    assertThat(request.toJson()).doesNotContain("liveResumptionReplay");
+    assertThat(request.toJson()).doesNotContain("liveRecoveryObserver");
+    assertThat(request.liveConnectConfig().toJson()).doesNotContain("liveResumptionReplay");
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> LlmRequest.builder().liveResumptionReplayMaxMessages(0).build());
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> LlmRequest.builder().liveResumptionReplayMaxBytes(0).build());
   }
 
   @Test

@@ -28,6 +28,7 @@ import com.google.genai.types.LiveSendRealtimeInputParameters;
 import com.google.genai.types.LiveSendToolResponseParameters;
 import com.google.genai.types.LiveServerContent;
 import com.google.genai.types.LiveServerMessage;
+import com.google.genai.types.LiveServerSessionResumptionUpdate;
 import com.google.genai.types.LiveServerToolCall;
 import com.google.genai.types.Part;
 import com.google.genai.types.UsageMetadata;
@@ -38,11 +39,14 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.processors.PublishProcessor;
 import java.net.SocketException;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,6 +63,7 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
   private static final Logger logger = LoggerFactory.getLogger(GeminiLlmConnection.class);
 
   private final CompletableFuture<GeminiLiveTransport> transportFuture;
+  private final String modelName;
   private final PublishProcessor<LlmResponse> responseProcessor = PublishProcessor.create();
   private final Flowable<LlmResponse> responseFlowable = responseProcessor.serialize();
   private final CompositeDisposable disposables = new CompositeDisposable();
@@ -70,6 +75,11 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
    * @param transportFuture The live transport the connection drives, once established.
    */
   GeminiLlmConnection(CompletableFuture<GeminiLiveTransport> transportFuture) {
+    this(transportFuture, "");
+  }
+
+  GeminiLlmConnection(CompletableFuture<GeminiLiveTransport> transportFuture, String modelName) {
+    this.modelName = Objects.requireNonNull(modelName);
     this.transportFuture =
         Objects.requireNonNull(transportFuture)
             .whenCompleteAsync(
@@ -115,7 +125,7 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
       return;
     }
 
-    logger.debug("Received server message: {}", message.toJson());
+    logger.debug("Received live server message types: {}", diagnosticMessageTypes(message));
 
     Observable<LlmResponse> llmResponse = convertToServerResponse(message);
     if (!disposables.add(
@@ -150,7 +160,7 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
               .usageMetadata()
               .ifPresent(
                   usageMetadata -> {
-                    logger.debug("Received usage metadata: {}", usageMetadata);
+                    logger.debug("Received live usage metadata.");
                     emitter.onNext(createUsageMetadataResponse(usageMetadata));
                     handled.set(true);
                   });
@@ -158,8 +168,23 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
               .toolCallCancellation()
               .ifPresent(
                   toolCallCancellation -> {
-                    logger.debug("Received tool call cancellation: {}", toolCallCancellation);
+                    logger.debug("Received live tool call cancellation.");
                     // TODO: implement proper CFC and thus tool call cancellation handling.
+                    handled.set(true);
+                  });
+          message
+              .sessionResumptionUpdate()
+              .ifPresent(
+                  sessionResumptionUpdate -> {
+                    logger.debug("Received live session resumption update.");
+                    emitter.onNext(createSessionResumptionUpdateResponse(sessionResumptionUpdate));
+                    handled.set(true);
+                  });
+          message
+              .goAway()
+              .ifPresent(
+                  goAway -> {
+                    emitter.onNext(LlmResponse.builder().liveGoAway(goAway).build());
                     handled.set(true);
                   });
           message
@@ -171,7 +196,7 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
                   });
 
           if (!handled.get()) {
-            logger.warn("Received unknown or empty server message: {}", message.toJson());
+            logger.warn("Received unknown or empty live server message.");
             emitter.onNext(createUnknownMessageResponse());
           }
           emitter.onComplete();
@@ -188,6 +213,37 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
         .inputTranscription(serverContent.inputTranscription().orElse(null))
         .outputTranscription(serverContent.outputTranscription().orElse(null))
         .build();
+  }
+
+  private static LlmResponse createSessionResumptionUpdateResponse(
+      LiveServerSessionResumptionUpdate sessionResumptionUpdate) {
+    return LlmResponse.builder().liveSessionResumptionUpdate(sessionResumptionUpdate).build();
+  }
+
+  static ImmutableList<String> diagnosticMessageTypes(LiveServerMessage message) {
+    ImmutableList.Builder<String> types = ImmutableList.builder();
+    if (message.serverContent().isPresent()) {
+      types.add("server_content");
+    }
+    if (message.toolCall().isPresent()) {
+      types.add("tool_call");
+    }
+    if (message.usageMetadata().isPresent()) {
+      types.add("usage_metadata");
+    }
+    if (message.toolCallCancellation().isPresent()) {
+      types.add("tool_call_cancellation");
+    }
+    if (message.sessionResumptionUpdate().isPresent()) {
+      types.add("session_resumption_update");
+    }
+    if (message.goAway().isPresent()) {
+      types.add("go_away");
+    }
+    if (message.setupComplete().isPresent()) {
+      types.add("setup_complete");
+    }
+    return types.build();
   }
 
   private static LlmResponse createToolCallResponse(LiveServerToolCall toolCall) {
@@ -224,9 +280,7 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
   private void handleConnectionError(Throwable throwable) {
     if (closed.compareAndSet(false, true)) {
       logger.error("WebSocket connection failed", throwable);
-      Throwable cause =
-          (throwable instanceof CompletionException) ? throwable.getCause() : throwable;
-      responseProcessor.onError(cause);
+      responseProcessor.onError(unwrapFutureError(throwable));
     }
   }
 
@@ -234,7 +288,7 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
   private void handleReceiveError(Throwable throwable) {
     if (closed.compareAndSet(false, true)) {
       logger.error("Error during WebSocket receive operation", throwable);
-      responseProcessor.onError(throwable);
+      responseProcessor.onError(unwrapFutureError(throwable));
       transportFuture
           .thenAccept(this::closeTransportIgnoringErrors)
           .exceptionally(unusedError -> null);
@@ -258,6 +312,9 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
 
     List<FunctionResponse> functionResponses = extractFunctionResponses(content);
     if (functionResponses.isEmpty()) {
+      if (shouldUseRealtimeTextInput(content)) {
+        return sendRealtimeText(content.text());
+      }
       return sendClientContentInternal(
           LiveSendClientContentParameters.builder()
               .turns(ImmutableList.of(content))
@@ -266,6 +323,25 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
     }
     return sendToolResponseInternal(
         LiveSendToolResponseParameters.builder().functionResponses(functionResponses).build());
+  }
+
+  private boolean shouldUseRealtimeTextInput(Content content) {
+    if (!isGemini31LiveModel() || isSystemContent(content)) {
+      return false;
+    }
+    if (content.parts().isEmpty() || content.parts().get().isEmpty()) {
+      return false;
+    }
+    return content.parts().get().stream().allMatch(part -> part.text().isPresent());
+  }
+
+  private boolean isGemini31LiveModel() {
+    String normalizedModelName = modelName.toLowerCase(Locale.ROOT);
+    return normalizedModelName.contains("gemini-3.1") && normalizedModelName.contains("live");
+  }
+
+  private static boolean isSystemContent(Content content) {
+    return content.role().map("system"::equals).orElse(false);
   }
 
   /** Extracts FunctionResponse parts from a Content object if all parts are FunctionResponses. */
@@ -286,23 +362,55 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
 
   @Override
   public Completable sendRealtime(Blob blob) {
-    return Completable.fromFuture(
-        transportFuture.thenCompose(
-            transport ->
-                transport.sendRealtimeInput(
-                    LiveSendRealtimeInputParameters.builder().media(blob).build())));
+    return sendOnTransport(transport -> transport.sendRealtimeInput(realtimeInputParameters(blob)));
+  }
+
+  private LiveSendRealtimeInputParameters realtimeInputParameters(Blob blob) {
+    if (!usesSplitRealtimeMediaFields()) {
+      return LiveSendRealtimeInputParameters.builder().media(blob).build();
+    }
+    String mimeType = blob.mimeType().orElse("").toLowerCase(Locale.ROOT);
+    if (mimeType.startsWith("audio/")) {
+      return LiveSendRealtimeInputParameters.builder().audio(blob).build();
+    }
+    if (mimeType.startsWith("image/") || mimeType.startsWith("video/")) {
+      return LiveSendRealtimeInputParameters.builder().video(blob).build();
+    }
+    return LiveSendRealtimeInputParameters.builder().media(blob).build();
+  }
+
+  private boolean usesSplitRealtimeMediaFields() {
+    String normalizedModelName = modelName.toLowerCase(Locale.ROOT);
+    int basenameOffset = normalizedModelName.lastIndexOf('/') + 1;
+    String modelBasename = normalizedModelName.substring(basenameOffset);
+    return modelBasename.startsWith("gemini-3.") && modelBasename.contains("-live");
+  }
+
+  private Completable sendRealtimeText(String text) {
+    return sendOnTransport(
+        transport ->
+            transport.sendRealtimeInput(
+                LiveSendRealtimeInputParameters.builder().text(text).build()));
   }
 
   /** Helper to send client content parameters. */
   private Completable sendClientContentInternal(LiveSendClientContentParameters parameters) {
-    return Completable.fromFuture(
-        transportFuture.thenCompose(transport -> transport.sendClientContent(parameters)));
+    return sendOnTransport(transport -> transport.sendClientContent(parameters));
   }
 
   /** Helper to send tool response parameters. */
   private Completable sendToolResponseInternal(LiveSendToolResponseParameters parameters) {
+    return sendOnTransport(transport -> transport.sendToolResponse(parameters));
+  }
+
+  private Completable sendOnTransport(Function<GeminiLiveTransport, CompletableFuture<Void>> send) {
     return Completable.fromFuture(
-        transportFuture.thenCompose(transport -> transport.sendToolResponse(parameters)));
+        transportFuture.thenCompose(
+            transport ->
+                closed.get()
+                    ? CompletableFuture.failedFuture(
+                        new IllegalStateException(ResumableLiveTransport.DELIVERY_UNKNOWN))
+                    : send.apply(transport)));
   }
 
   @Override
@@ -318,7 +426,15 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
   @Override
   public void close(Throwable throwable) {
     Objects.requireNonNull(throwable, "throwable cannot be null for close");
-    closeInternal(throwable);
+    closeInternal(unwrapFutureError(throwable));
+  }
+
+  private static Throwable unwrapFutureError(Throwable error) {
+    while ((error instanceof CompletionException || error instanceof ExecutionException)
+        && error.getCause() != null) {
+      error = error.getCause();
+    }
+    return error;
   }
 
   /** Internal method to handle closing logic and signal completion/error. */
@@ -336,9 +452,10 @@ public final class GeminiLlmConnection implements BaseLlmConnection {
         transportFuture
             .thenAccept(this::closeTransportIgnoringErrors)
             .exceptionally(unusedError -> null);
-      } else {
-        transportFuture.cancel(false);
       }
+
+      // Keep the setup continuation alive: setupReceiver closes a transport that arrives after
+      // cancellation. Cancelling this derived future would discard that cleanup callback.
 
       disposables.dispose();
     }

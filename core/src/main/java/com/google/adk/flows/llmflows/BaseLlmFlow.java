@@ -759,6 +759,11 @@ public abstract class BaseLlmFlow implements BaseFlow {
                       () ->
                           receiveFlow.takeWhile(
                               event -> !event.actions().endInvocation().orElse(false)))
+                  .doOnCancel(
+                      () -> {
+                        sendTask.dispose();
+                        connection.close();
+                      })
                   .compose(Tracing.withContext(spanContext));
             }));
   }
@@ -786,7 +791,9 @@ public abstract class BaseLlmFlow implements BaseFlow {
             || updatedResponse.usageMetadata().isEmpty())
         && updatedResponse.inputTranscription().isEmpty()
         && updatedResponse.outputTranscription().isEmpty()
-        && updatedResponse.groundingMetadata().isEmpty()) {
+        && updatedResponse.groundingMetadata().isEmpty()
+        && updatedResponse.liveSessionResumptionUpdate().isEmpty()
+        && updatedResponse.liveGoAway().isEmpty()) {
       return processorEvents;
     }
 
@@ -921,11 +928,17 @@ public abstract class BaseLlmFlow implements BaseFlow {
             .modelVersion(llmResponse.modelVersion().orElse(null))
             .inputTranscription(llmResponse.inputTranscription().orElse(null))
             .outputTranscription(llmResponse.outputTranscription().orElse(null))
+            .liveSessionResumptionUpdate(llmResponse.liveSessionResumptionUpdate().orElse(null))
+            .liveGoAway(llmResponse.liveGoAway().orElse(null))
             .cacheMetadata(llmResponse.cacheMetadata().orElse(null));
 
     Event event = eventBuilder.build();
 
-    logger.debug("event: {} functionCalls: {}", event, event.functionCalls());
+    logger.debug(
+        "Built model response event (contentPresent={}, functionCallCount={}, resumptionUpdatePresent={}).",
+        event.content().isPresent(),
+        event.functionCalls().size(),
+        event.liveSessionResumptionUpdate().isPresent());
 
     if (!event.functionCalls().isEmpty()) {
       Functions.populateClientFunctionCallId(event, context.uuidProvider());
