@@ -1,13 +1,14 @@
 # Virtis ADK Java fork maintainer inventory
 
 The exact upstream ADK Java baseline is tag `v1.14.0`, commit
-`b45fae72c2b5a132070bdd2a8cdc5ad9ff783fda`, on branch `virtis_adk_1.14.0`.
+`b45fae72c2b5a132070bdd2a8cdc5ad9ff783fda`. Port lane `virtis_adk_1.14.0` is
+accepted onto Decil fork branch `virtis_main` (tag `virtis-v1.14.0-1`).
 It is a port of the accepted `v1.12.0`-based Virtis runtime commit
 `baa5801ea110b54616977e5a24b4cb6f0761c5cf` (history:
-`a671d98e`, `04abfdba`, `3d6e5adc`, `baa5801e`). The immutable consumer
-coordinate for this line is
-`com.github.DecilAI2025.adk-java:google-adk:<full-sha-of-branch-head>`; a
-branch name or tag is never a production pin.
+`a671d98e`, `04abfdba`, `3d6e5adc`, `baa5801e`). Consumers read reviewed
+revisions from `virtis_main` and pin the immutable consumer coordinate
+`com.github.DecilAI2025.adk-java:google-adk:<full-sha-of-virtis_main-head>`; a
+branch name or tag is never a production Maven pin.
 
 ## Upstream turn-completion adaptation (Virtis `turnComplete` API removed)
 
